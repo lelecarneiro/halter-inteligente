@@ -1,0 +1,22 @@
+
+# Ambiente virtual Python
+.venv/
+venv/
+
+# Cache e arquivos temporários Python
+__pycache__/
+*.py[cod]
+
+# Configurações locais e segredos
+.env
+.env.*
+
+# Exceção: manter um modelo de configuração
+!.env.example
+
+# Arquivos de sistema do macOS
+.DS_Store
+
+# Resultados locais de análise
+outputs/
+data/raw/
