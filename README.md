@@ -28,12 +28,12 @@ O sistema tem três partes integradas:
 ```
 
 ### Fluxo de uma sessão
-1. O profissional entra na **plataforma**, escolhe o paciente e configura a sessão: braço, cadência, amplitude, número de repetições e duração.
+1. O profissional entra na **plataforma**, escolhe o paciente e configura a sessão: **exercício**, braço, cadência, amplitude, número de repetições e duração.
 2. O **jogo** abre já configurado. O paciente movimenta o haltere e o pássaro sobe e desce acompanhando o ângulo do braço.
 3. Os canos chegam **no ritmo da cadência alvo**, alternando abertura no alto (levantar) e embaixo (abaixar). O profissional pode **ajustar a cadência ao vivo** pelo painel lateral.
 4. Cada repetição é detectada, comparada com o ritmo alvo e enviada ao backend. O paciente recebe feedback ("No ritmo ✓", "Mais devagar", "Mais rápido") e pontos.
 5. Ao final, o **módulo de análise** aplica os métodos numéricos às leituras brutas da sessão e guarda as métricas no histórico do paciente.
-6. O profissional vê a análise da sessão e a **evolução** do paciente ao longo do tratamento.
+6. O profissional vê a análise da sessão e a **evolução** do paciente ao longo do tratamento, sempre comparando sessões do **mesmo exercício**.
 
 ---
 
@@ -102,10 +102,35 @@ O jogo também pode ser aberto sozinho em **http://localhost:5000/game/**. Nesse
 | Tela | O que tem |
 |---|---|
 | **Pacientes** | Lista de pacientes e cadastro (nome, nascimento, observações clínicas) |
-| **Paciente** | Formulário de nova sessão · evolução do score e das notas · 6 gráficos de métricas por sessão · histórico |
+| **Paciente** | Editar ou excluir o paciente · nova sessão · evolução do score e das notas · 6 gráficos de métricas por sessão · histórico (filtrados por exercício e braço) |
 | **Sessão** | Score geral e notas · desempenho no jogo · métricas de movimento, coordenação, compensação e simetria · gráficos do movimento · tabela de repetições |
 
-**Dica de simetria:** faça pelo menos uma sessão com o **braço saudável**. Ela vira a referência para comparar o braço afetado. Sem ela, a nota de simetria não é calculada e o peso dela é redistribuído entre as outras notas.
+### Exercícios e comparação entre sessões
+Cada sessão pertence a uma **categoria de exercício**. A evolução, os gráficos e o histórico do paciente mostram **um exercício por vez**: o histórico de elevação lateral, por exemplo, só compara sessões de elevação lateral. Use o filtro **Exercício** acima dos gráficos para trocar.
+
+Categorias já incluídas (membros superiores):
+
+| Categoria | Movimento |
+|---|---|
+| Flexão de cotovelo | Rosca bíceps: dobrar o cotovelo trazendo o haltere ao ombro |
+| Extensão de cotovelo | Tríceps: estender o cotovelo, com o braço elevado ou apoiado |
+| Elevação lateral | Abdução de ombro: elevar o braço estendido para o lado |
+| Elevação frontal | Flexão de ombro: elevar o braço estendido à frente |
+| Desenvolvimento de ombro | Elevar o haltere da altura do ombro até acima da cabeça |
+| Remada | Puxar o haltere em direção ao tronco |
+| Rotação externa de ombro | Cotovelo junto ao corpo a 90°: girar o antebraço para fora |
+| Flexão de punho | Antebraço apoiado, palma para cima: dobrar o punho |
+| Extensão de punho | Antebraço apoiado, palma para baixo: estender o punho |
+| Pronação e supinação | Girar o antebraço, virando a palma para cima e para baixo |
+
+**Criar uma categoria:** no formulário de nova sessão, abra a lista **Exercício** e escolha **"+ Nova categoria…"**. Informe o nome e, se quiser, a descrição. Categorias criadas por você podem ser excluídas enquanto ainda não tiverem sessões.
+
+Ao escolher um exercício, o formulário é preenchido com a cadência, a amplitude e as repetições da **última sessão daquele exercício** do paciente.
+
+### Editar e excluir pacientes
+Na página do paciente, use **Editar** para corrigir nome, nascimento e observações. **Excluir paciente** pede confirmação e apaga também todas as sessões, repetições e leituras brutas do haltere. A exclusão não pode ser desfeita.
+
+**Dica de simetria:** faça pelo menos uma sessão com o **braço saudável**. Ela vira a referência para comparar o braço afetado **no mesmo exercício**. Sem ela, a nota de simetria não é calculada e o peso dela é redistribuído entre as outras notas.
 
 ### Painel do jogo (ajustes ao vivo)
 - **Cadência alvo** (4–30 rep/min): muda o ritmo dos canos na hora.
@@ -188,8 +213,10 @@ t_ms,theta,ax,ay,az
 |---|---|---|
 | `POST` | `/api/login` · `/api/logout` | Entrar e sair |
 | `GET` / `POST` | `/api/patients` | Listar e cadastrar pacientes |
-| `GET` | `/api/patients/<id>` | Dados do paciente |
-| `GET` | `/api/patients/<id>/sessions` | Histórico com as métricas |
+| `GET` · `PUT` · `DELETE` | `/api/patients/<id>` | Ver, editar ou excluir o paciente (exclui também as sessões) |
+| `GET` | `/api/patients/<id>/sessions?exercicio_id=<id>` | Histórico com as métricas, opcionalmente de um exercício |
+| `GET` / `POST` | `/api/exercicios` | Listar e criar categorias de exercício |
+| `DELETE` | `/api/exercicios/<id>` | Excluir categoria personalizada ainda sem sessões |
 | `POST` | `/api/sessions` | Criar sessão; devolve o link do jogo configurado |
 | `POST` | `/api/sessions/<id>/reps` | O jogo envia cada repetição |
 | `POST` | `/api/sessions/<id>/end` | Encerrar a sessão e rodar a análise |
@@ -207,7 +234,7 @@ t_ms,theta,ax,ay,az
 | `No module named 'bleak'` ou `'flask'` | Rode `python3 -m pip install -r requirements.txt` |
 | Jogo mostra "procurando haltere…" | Confira se o ESP32 está ligado com o LED verde aceso e se o Terminal tem permissão de Bluetooth. Só um computador pode estar conectado ao haltere por vez |
 | Jogo mostra "Sinal do haltere perdido" | O jogo pausa sozinho e retoma quando os dados voltam. Aproxime o haltere do computador |
-| Erro de banco depois de atualizar o projeto | Apague `data/halter.db`. Ele é recriado vazio, e o histórico anterior é perdido |
+| Erro de banco depois de atualizar o projeto | O banco é atualizado automaticamente ao iniciar o backend, sem perder dados. Se o erro continuar, apague `data/halter.db` (o histórico será perdido) |
 | Gráficos não aparecem | Verifique a conexão com a internet (o Chart.js vem de um CDN) |
 | Arduino IDE não compila | Instale o pacote de placas **esp32** da Espressif em Ferramentas → Placa → Gerenciador de placas |
 

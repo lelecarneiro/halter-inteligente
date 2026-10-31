@@ -68,6 +68,13 @@
   .tile .valor { font-size:22px; font-weight:700; margin:2px 0; font-variant-numeric:tabular-nums; }
   .tile .metodo { font-size:12px; color:var(--mudo); }
   .tile .medidor { height:5px; margin-top:6px; }
+  .titulo { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .titulo .acoes { margin-left:auto; display:flex; gap:8px; }
+  .titulo h1 { margin-right:auto; }
+  button.perigo { color:var(--erro); border-color:var(--erro); }
+  .botoes { display:flex; gap:8px; }
+  .sub-cartao { border:1px dashed var(--borda); border-radius:10px; padding:12px; margin:-4px 0 12px; }
+  .foco { text-transform:none; letter-spacing:0; color:var(--txt); }
   details summary { cursor:pointer; color:var(--acento); font-size:14px; }
   @media (max-width:900px) { .grade2, .grade-paciente, .graficos, .heroi { grid-template-columns:1fr; } .multiplos { grid-template-columns:1fr 1fr; } }
   @media (max-width:560px) { .multiplos, .dupla { grid-template-columns:1fr; } main { padding:16px; } }
@@ -194,37 +201,66 @@ const NOTAS = [
 ];
 
 async function telaPaciente(id) {
-  const [p, sessoes] = await Promise.all([api(`/api/patients/${id}`), api(`/api/patients/${id}/sessions`)]);
-  const ultima = sessoes.at(-1) || {};
+  const [p, sessoes, exercicios] = await Promise.all([
+    api(`/api/patients/${id}`), api(`/api/patients/${id}/sessions`), api('/api/exercicios')]);
+  const exercicio = eid => exercicios.find(e => e.id === eid);
+  const ultimaDe = eid => sessoes.filter(s => s.exercicio_id === eid).at(-1);
+  const comSessoes = exercicios.filter(e => sessoes.some(s => s.exercicio_id === e.id));
+  let foco = sessoes.at(-1)?.exercicio_id ?? exercicios[0]?.id;     // exercício mais recente do paciente
+  const opcoesExercicio = sel => exercicios.map(e =>
+    `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.nome)}${e.padrao ? '' : ' (personalizada)'}</option>`).join('');
+
   app.innerHTML = `
     <a class="voltar" href="#/">← Pacientes</a>
-    <h1>${esc(p.nome)}</h1>
+    <div class="titulo">
+      <h1>${esc(p.nome)}</h1>
+      <div class="acoes"><button id="btEditar">Editar</button><button id="btExcluir" class="perigo">Excluir paciente</button></div>
+    </div>
     <p class="mudo">${p.nascimento ? 'Nascimento: ' + new Date(p.nascimento + 'T00:00').toLocaleDateString('pt-BR') + ' · ' : ''}${esc(p.observacoes || '')}</p>
+
+    <form class="cartao" id="fEditar" hidden>
+      <h2>Editar paciente</h2>
+      <div class="grade2">
+        <label>Nome<input name="nome" value="${esc(p.nome)}" required></label>
+        <label>Data de nascimento<input name="nascimento" type="date" value="${esc(p.nascimento || '')}"></label>
+      </div>
+      <label>Observações clínicas<textarea name="observacoes" rows="3">${esc(p.observacoes || '')}</textarea></label>
+      <div class="botoes"><button class="pri">Salvar</button><button type="button" id="btCancelarEdicao">Cancelar</button></div>
+    </form>
 
     <div class="grade-paciente">
       <form class="cartao" id="fSessao">
         <h2>Nova sessão</h2>
+        <label>Exercício<select name="exercicio_id" id="selExercicio">${opcoesExercicio(foco)}
+          <option value="nova">+ Nova categoria…</option></select></label>
+        <div class="sub-cartao" id="novaCategoria" hidden>
+          <label>Nome da nova categoria<input id="novoNome" maxlength="60" placeholder="Ex.: Abdução horizontal de ombro"></label>
+          <label>Descrição (opcional)<input id="novaDescricao" maxlength="200" placeholder="Como o movimento é feito"></label>
+          <div class="botoes"><button type="button" class="pri" id="btCriarCategoria">Criar categoria</button>
+            <button type="button" id="btCancelarCategoria">Cancelar</button></div>
+        </div>
+        <p class="mudo pequeno" id="descExercicio"></p>
         <label>Braço<select name="braco">
           <option value="afetado">Afetado</option><option value="saudavel">Saudável (referência de simetria)</option></select></label>
-        <label>Exercício<input name="exercicio" value="${esc(ultima.exercicio || 'Flexão de cotovelo')}"></label>
         <div class="dupla">
-          <label>Cadência (rep/min)<input name="cadencia_alvo" type="number" min="4" max="30" value="${ultima.cadencia_alvo || 12}" required></label>
-          <label>Nº de repetições<input name="reps_alvo" type="number" min="1" max="200" placeholder="livre" value="${ultima.reps_alvo || ''}"></label>
+          <label>Cadência (rep/min)<input name="cadencia_alvo" type="number" min="4" max="30" required></label>
+          <label>Nº de repetições<input name="reps_alvo" type="number" min="1" max="200" placeholder="livre"></label>
         </div>
         <div class="dupla">
-          <label>Posição baixa (°)<input name="amp_min" type="number" value="${ultima.amp_min ?? 0}" required></label>
-          <label>Posição alta (°)<input name="amp_max" type="number" value="${ultima.amp_max ?? 60}" required></label>
+          <label>Posição baixa (°)<input name="amp_min" type="number" required></label>
+          <label>Posição alta (°)<input name="amp_max" type="number" required></label>
         </div>
-        <label>Duração máxima (min)<input name="duracao_min" type="number" min="1" max="30" value="${ultima.duracao_min || 3}" required></label>
+        <label>Duração máxima (min)<input name="duracao_min" type="number" min="1" max="30" required></label>
         <button class="pri">Criar sessão e abrir o jogo</button>
-        <p class="mudo pequeno">Cadência e amplitude também podem ser ajustadas no painel do jogo durante a sessão.</p>
+        <p class="mudo pequeno">Os campos vêm da última sessão deste exercício. Cadência e amplitude também podem ser ajustadas no jogo.</p>
       </form>
 
       <section class="cartao">
         <h2>Evolução</h2>
-        <div class="filtros">Braço
-          <select id="fBraco"><option value="afetado">Afetado</option><option value="saudavel">Saudável</option></select>
-        </div>
+        ${comSessoes.length ? `<div class="filtros">
+          Exercício <select id="fExercicio">${comSessoes.map(e => `<option value="${e.id}" ${e.id === foco ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select>
+          Braço <select id="fBraco"><option value="afetado">Afetado</option><option value="saudavel">Saudável</option></select>
+        </div>` : ''}
         <h3>Score geral e notas (0 a 100)</h3>
         <div class="caixa-grafico alto"><canvas id="gNotas"></canvas></div>
         <p class="mudo pequeno" id="semEvolucao"></p>
@@ -232,36 +268,89 @@ async function telaPaciente(id) {
     </div>
 
     <section class="cartao">
-      <h2>Métricas por sessão</h2>
+      <h2>Métricas por sessão — <span class="foco"></span></h2>
       <div class="multiplos">${EVOLUCAO.map(m => `<div><h3>${m.nome}</h3><div class="caixa-grafico"><canvas id="ev_${m.id}"></canvas></div></div>`).join('')}</div>
     </section>
 
     <section class="cartao">
-      <h2>Histórico de sessões</h2>
-      ${sessoes.length ? `<table>
-        <tr><th>Data</th><th>Braço</th><th class="num">Cadência</th><th class="num">Reps</th><th class="num">No ritmo</th>
-            <th class="num">Amplitude</th><th class="num">Score geral</th><th></th></tr>
-        ${sessoes.slice().reverse().map(s => `<tr>
-          <td>${dataHora(s.inicio)}</td><td>${nomeBraco(s.braco)}</td><td class="num">${num(s.cadencia_alvo, 0)}/min</td>
-          <td class="num">${s.total_reps ?? '—'}</td><td class="num">${s.aderencia_cadencia == null ? '—' : num(s.aderencia_cadencia * 100, 0, ' %')}</td>
-          <td class="num">${num(s.amp_media, 1, '°')}</td><td class="num"><b>${num(s.score_geral, 0)}</b></td>
-          <td class="num">${s.fim ? `<a href="#/sessao/${s.id}">Ver análise</a>` : '<span class="mudo">em andamento</span>'}</td></tr>`).join('')}
-      </table>` : '<p class="mudo">Nenhuma sessão ainda.</p>'}
+      <h2>Histórico de sessões — <span class="foco"></span></h2>
+      <div id="tabelaSessoes"></div>
     </section>`;
 
-  aoEnviar($('#fSessao'), async dados => {
+  // ---- Editar e excluir paciente ----
+  $('#btEditar').onclick = () => { $('#fEditar').hidden = false; $('#fEditar [name=nome]').focus(); };
+  $('#btCancelarEdicao').onclick = () => { $('#fEditar').hidden = true; };
+  aoEnviar($('#fEditar'), async dados => { await api(`/api/patients/${id}`, { method: 'PUT', body: dados }); rota(); });
+  $('#btExcluir').onclick = async () => {
+    const aviso = `Excluir ${p.nome}${sessoes.length ? ` e as ${sessoes.length} sessões registradas (com todas as leituras do haltere)` : ''}?\n\nEsta ação não pode ser desfeita.`;
+    if (!confirm(aviso)) return;
+    try { await api(`/api/patients/${id}`, { method: 'DELETE' }); location.hash = '#/'; } catch (e) { alert(e.message); }
+  };
+
+  // ---- Formulário de nova sessão: categoria e valores da última sessão desse exercício ----
+  const form = $('#fSessao'), sel = $('#selExercicio');
+  function preencher() {
+    const e = exercicio(+sel.value), u = ultimaDe(+sel.value) || {};
+    form.cadencia_alvo.value = u.cadencia_alvo || 12; form.reps_alvo.value = u.reps_alvo || '';
+    form.amp_min.value = u.amp_min ?? 0; form.amp_max.value = u.amp_max ?? 60; form.duracao_min.value = u.duracao_min || 3;
+    $('#descExercicio').innerHTML = esc(e?.descricao || '') + (e && !e.padrao && !e.sessoes
+      ? ` <a href="#" id="lkExcluirCategoria">Excluir esta categoria</a>` : '');
+    const lk = $('#lkExcluirCategoria');
+    if (lk) lk.onclick = async ev => {
+      ev.preventDefault();
+      if (!confirm(`Excluir a categoria "${e.nome}"?`)) return;
+      try { await api(`/api/exercicios/${e.id}`, { method: 'DELETE' }); rota(); } catch (erro) { alert(erro.message); }
+    };
+  }
+  let anterior = sel.value;
+  sel.onchange = () => {
+    const nova = sel.value === 'nova';
+    $('#novaCategoria').hidden = !nova;
+    if (nova) return $('#novoNome').focus();
+    anterior = sel.value; preencher();
+  };
+  $('#btCancelarCategoria').onclick = () => { sel.value = anterior; $('#novaCategoria').hidden = true; };
+  $('#btCriarCategoria').onclick = async () => {
+    try {
+      const nova = await api('/api/exercicios', { method: 'POST', body: { nome: $('#novoNome').value, descricao: $('#novaDescricao').value } });
+      exercicios.push({ ...nova, descricao: $('#novaDescricao').value, padrao: 0, sessoes: 0 });
+      sel.innerHTML = opcoesExercicio(nova.id) + '<option value="nova">+ Nova categoria…</option>';
+      anterior = sel.value; $('#novaCategoria').hidden = true; $('#novoNome').value = $('#novaDescricao').value = '';
+      preencher();
+    } catch (erro) { alert(erro.message); }
+  };
+  aoEnviar(form, async dados => {
+    if (dados.exercicio_id === 'nova') throw new Error('Crie a categoria ou escolha um exercício da lista.');
     const { jogo } = await api('/api/sessions', { method: 'POST', body: { ...dados, patient_id: id } });
     location.href = jogo;                          // abre o jogo já configurado
   });
-  $('#fBraco').onchange = () => desenharEvolucao(sessoes, $('#fBraco').value);
-  desenharEvolucao(sessoes, 'afetado');
+  preencher();
+
+  // ---- Evolução e histórico: sempre de um exercício por vez ----
+  function atualizar() {
+    const eid = $('#fExercicio') ? +$('#fExercicio').value : null, braco = $('#fBraco')?.value || 'afetado';
+    const doExercicio = sessoes.filter(s => s.exercicio_id === eid);
+    document.querySelectorAll('.foco').forEach(el => el.textContent = exercicio(eid)?.nome || 'sem sessões');
+    desenharEvolucao(doExercicio, braco);
+    $('#tabelaSessoes').innerHTML = doExercicio.length ? `<table>
+      <tr><th>Data</th><th>Braço</th><th class="num">Cadência</th><th class="num">Reps</th><th class="num">No ritmo</th>
+          <th class="num">Amplitude</th><th class="num">Score geral</th><th></th></tr>
+      ${doExercicio.slice().reverse().map(s => `<tr>
+        <td>${dataHora(s.inicio)}</td><td>${nomeBraco(s.braco)}</td><td class="num">${num(s.cadencia_alvo, 0)}/min</td>
+        <td class="num">${s.total_reps ?? '—'}</td><td class="num">${s.aderencia_cadencia == null ? '—' : num(s.aderencia_cadencia * 100, 0, ' %')}</td>
+        <td class="num">${num(s.amp_media, 1, '°')}</td><td class="num"><b>${num(s.score_geral, 0)}</b></td>
+        <td class="num">${s.fim ? `<a href="#/sessao/${s.id}">Ver análise</a>` : '<span class="mudo">em andamento</span>'}</td></tr>`).join('')}
+    </table>` : '<p class="mudo">Nenhuma sessão ainda.</p>';
+  }
+  if ($('#fExercicio')) { $('#fExercicio').onchange = atualizar; $('#fBraco').onchange = atualizar; }
+  atualizar();
 }
 
 function desenharEvolucao(sessoes, braco) {
   graficos.forEach(g => g.destroy()); graficos = [];
   const feitas = sessoes.filter(s => s.fim && s.braco === braco);
   const rotulos = feitas.map((s, i) => `${i + 1}ª · ${dataCurta(s.inicio)}`);
-  $('#semEvolucao').textContent = feitas.length ? '' : `Nenhuma sessão concluída com o braço ${nomeBraco(braco).toLowerCase()}.`;
+  $('#semEvolucao').textContent = feitas.length ? '' : `Nenhuma sessão concluída deste exercício com o braço ${nomeBraco(braco).toLowerCase()}.`;
   const comPontos = { pointRadius: 4, pointHoverRadius: 6, spanGaps: true, pointBorderColor: cor('--cartao'), pointBorderWidth: 2 };
   grafico('gNotas', {
     type: 'line',
@@ -288,7 +377,7 @@ async function telaSessao(id) {
   app.innerHTML = `
     <a class="voltar" href="#/paciente/${s.patient_id}">← Paciente</a>
     <h1>Sessão de ${dataHora(s.inicio)}</h1>
-    <p class="mudo">${esc(s.exercicio)} · braço ${nomeBraco(s.braco).toLowerCase()} · cadência alvo ${num(s.cadencia_alvo, 0)} rep/min
+    <p class="mudo">${esc(s.exercicio_nome || s.exercicio)} · braço ${nomeBraco(s.braco).toLowerCase()} · cadência alvo ${num(s.cadencia_alvo, 0)} rep/min
       · amplitude alvo ${num(s.amp_min, 0)}° a ${num(s.amp_max, 0)}°${s.reps_alvo ? ` · meta de ${s.reps_alvo} repetições` : ''}</p>
 
     ${!s.fim ? '<p class="cartao">Sessão em andamento. A análise aparece quando o jogo for encerrado.</p>' : a ? `

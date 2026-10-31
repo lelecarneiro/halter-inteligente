@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 from bleak import BleakClient, BleakScanner
-from flask import Flask, Response, abort, g, jsonify, request, send_from_directory, session
+from flask import Flask, Response, abort, g, jsonify, make_response, request, send_from_directory, session
 
 RAIZ = Path(__file__).resolve().parent.parent
 FRONT = RAIZ / 'frontend'
@@ -116,11 +116,13 @@ def stream():
 # 2. BANCO DE DADOS
 # =====================================================================
 ESQUEMA = '''
+CREATE TABLE IF NOT EXISTS exercicios (
+  id INTEGER PRIMARY KEY, nome TEXT NOT NULL UNIQUE COLLATE NOCASE, descricao TEXT, padrao INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS patients (
   id INTEGER PRIMARY KEY, nome TEXT NOT NULL, nascimento TEXT, observacoes TEXT);
 CREATE TABLE IF NOT EXISTS sessions (
   id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patients(id), inicio TEXT, fim TEXT,
-  exercicio TEXT, braco TEXT, cadencia_alvo REAL, amp_min REAL, amp_max REAL,                 -- configuração
+  exercicio TEXT, exercicio_id INTEGER REFERENCES exercicios(id), braco TEXT, cadencia_alvo REAL, amp_min REAL, amp_max REAL,                 -- configuração
   duracao_min REAL, reps_alvo INTEGER,
   duracao_s REAL, total_reps INTEGER, amp_media REAL, vel_media REAL,                         -- resultados do jogo
   aderencia_cadencia REAL, obstaculos TEXT, pontuacao INTEGER,
@@ -129,6 +131,38 @@ CREATE TABLE IF NOT EXISTS reps (
   id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL REFERENCES sessions(id), n INTEGER, t_ms INTEGER,
   amplitude REAL, vel_pico REAL, duracao_s REAL, no_ritmo INTEGER, cadencia REAL);
 '''
+
+# Categorias de exercícios de membros superiores criadas automaticamente (o profissional pode criar outras)
+EXERCICIOS_PADRAO = [
+    ('Flexão de cotovelo', 'Rosca bíceps: dobrar o cotovelo trazendo o haltere em direção ao ombro'),
+    ('Extensão de cotovelo', 'Tríceps: estender o cotovelo, com o braço elevado ou apoiado'),
+    ('Elevação lateral', 'Abdução de ombro: elevar o braço estendido para o lado até a altura do ombro'),
+    ('Elevação frontal', 'Flexão de ombro: elevar o braço estendido à frente até a altura do ombro'),
+    ('Desenvolvimento de ombro', 'Elevar o haltere da altura do ombro até acima da cabeça'),
+    ('Remada', 'Puxar o haltere em direção ao tronco, com o tronco inclinado ou apoiado'),
+    ('Rotação externa de ombro', 'Cotovelo junto ao corpo a 90°: girar o antebraço para fora'),
+    ('Flexão de punho', 'Antebraço apoiado, palma para cima: dobrar o punho'),
+    ('Extensão de punho', 'Antebraço apoiado, palma para baixo: estender o punho'),
+    ('Pronação e supinação', 'Girar o antebraço, virando a palma para cima e para baixo'),
+]
+
+
+def inicializar_banco():
+    """Cria as tabelas, as categorias padrão e atualiza bancos de versões anteriores sem perder dados."""
+    with sqlite3.connect(BANCO) as con:
+        con.executescript(ESQUEMA)
+        existentes = {coluna[1] for coluna in con.execute('PRAGMA table_info(sessions)')}
+        for coluna, tipo in [('exercicio_id', 'INTEGER'), ('braco', 'TEXT'), ('reps_alvo', 'INTEGER'),
+                             ('score_geral', 'REAL'), ('analise', 'TEXT')]:
+            if coluna not in existentes:
+                con.execute(f'ALTER TABLE sessions ADD COLUMN {coluna} {tipo}')
+        con.executemany('INSERT OR IGNORE INTO exercicios (nome, descricao, padrao) VALUES (?, ?, 1)', EXERCICIOS_PADRAO)
+        # Sessões antigas guardavam o exercício como texto livre: vira categoria
+        con.execute("UPDATE sessions SET exercicio = 'Flexão de cotovelo' WHERE exercicio IS NULL OR TRIM(exercicio) = ''")
+        con.execute('INSERT OR IGNORE INTO exercicios (nome) SELECT DISTINCT exercicio FROM sessions WHERE exercicio_id IS NULL')
+        con.execute('UPDATE sessions SET exercicio_id = (SELECT id FROM exercicios e WHERE e.nome = sessions.exercicio) '
+                    'WHERE exercicio_id IS NULL')
+        con.execute("UPDATE sessions SET braco = 'afetado' WHERE braco IS NULL")
 
 
 def db():
@@ -156,6 +190,11 @@ def sessao_aberta(sid):
     if linha['fim']:
         abort(409)        # sessão já encerrada
     return linha
+
+
+def falha(codigo, mensagem):
+    """Interrompe a requisição com uma mensagem de erro legível pela plataforma."""
+    abort(make_response(jsonify(erro=mensagem), codigo))
 
 
 @app.errorhandler(ValueError)
@@ -283,8 +322,8 @@ def analisar(sid, comparar_bracos=True):
     # 5.9 Comparação entre braços: sessão mais recente do braço saudável do mesmo paciente
     rmse_simetria = atraso_apice = curva_saudavel = id_saudavel = None
     if comparar_bracos and sessao['braco'] == 'afetado':
-        outra = consulta("SELECT id FROM sessions WHERE patient_id = ? AND braco = 'saudavel' AND fim IS NOT NULL "
-                         'ORDER BY inicio DESC LIMIT 1', sessao['patient_id'])
+        outra = consulta("SELECT id FROM sessions WHERE patient_id = ? AND exercicio_id IS ? AND braco = 'saudavel' "
+                         'AND fim IS NOT NULL ORDER BY inicio DESC LIMIT 1', sessao['patient_id'], sessao['exercicio_id'])
         saudavel = analisar(outra[0]['id'], comparar_bracos=False) if outra else None
         if saudavel:
             id_saudavel = outra[0]['id']
@@ -380,10 +419,90 @@ def paciente(pid):
     return jsonify(linha[0])
 
 
+@app.put('/api/patients/<int:pid>')
+@login_obrigatorio
+def editar_paciente(pid):
+    d = request.get_json(force=True)
+    nome = str(d['nome']).strip()
+    if not nome:
+        raise ValueError('nome vazio')
+    cur = db().execute('UPDATE patients SET nome = ?, nascimento = ?, observacoes = ? WHERE id = ?',
+                       (nome, d.get('nascimento') or None, d.get('observacoes'), pid))
+    db().commit()
+    if cur.rowcount == 0:
+        abort(404)
+    return jsonify(ok=True)
+
+
+@app.delete('/api/patients/<int:pid>')
+@login_obrigatorio
+def excluir_paciente(pid):
+    """Exclui o paciente com todas as sessões, repetições e leituras brutas."""
+    global gravacao
+    if not consulta('SELECT id FROM patients WHERE id = ?', pid):
+        abort(404)
+    sessoes = [s['id'] for s in consulta('SELECT id FROM sessions WHERE patient_id = ?', pid)]
+    for sid in sessoes:
+        arquivo = BRUTOS / f'sessao_{sid}.csv'
+        if gravacao and Path(gravacao.name) == arquivo:
+            gravacao.close()
+            gravacao = None
+        arquivo.unlink(missing_ok=True)
+    db().execute('DELETE FROM reps WHERE session_id IN (SELECT id FROM sessions WHERE patient_id = ?)', (pid,))
+    db().execute('DELETE FROM sessions WHERE patient_id = ?', (pid,))
+    db().execute('DELETE FROM patients WHERE id = ?', (pid,))
+    db().commit()
+    return jsonify(ok=True, sessoes_excluidas=len(sessoes))
+
+
+# ---------- Categorias de exercícios ----------
+@app.get('/api/exercicios')
+@login_obrigatorio
+def listar_exercicios():
+    return jsonify(consulta('SELECT e.*, COUNT(s.id) AS sessoes FROM exercicios e LEFT JOIN sessions s '
+                            'ON s.exercicio_id = e.id GROUP BY e.id ORDER BY e.padrao DESC, e.nome'))
+
+
+@app.post('/api/exercicios')
+@login_obrigatorio
+def criar_exercicio():
+    d = request.get_json(force=True)
+    nome = ' '.join(str(d['nome']).split())
+    if not 2 <= len(nome) <= 60:
+        raise ValueError('o nome deve ter entre 2 e 60 caracteres')
+    existente = consulta('SELECT nome FROM exercicios WHERE nome = ?', nome)
+    if existente:
+        falha(409, f'Já existe a categoria "{existente[0]["nome"]}".')
+    cur = db().execute('INSERT INTO exercicios (nome, descricao) VALUES (?, ?)', (nome, d.get('descricao') or None))
+    db().commit()
+    return jsonify(id=cur.lastrowid, nome=nome), 201
+
+
+@app.delete('/api/exercicios/<int:eid>')
+@login_obrigatorio
+def excluir_exercicio(eid):
+    """Só exclui categorias criadas pelo profissional e que ainda não têm sessões."""
+    e = consulta('SELECT e.padrao, COUNT(s.id) AS sessoes FROM exercicios e LEFT JOIN sessions s ON s.exercicio_id = e.id '
+                 'WHERE e.id = ? GROUP BY e.id', eid)
+    if not e:
+        abort(404)
+    if e[0]['padrao'] or e[0]['sessoes']:
+        falha(409, 'Só é possível excluir categorias criadas por você e ainda sem sessões.')
+    db().execute('DELETE FROM exercicios WHERE id = ?', (eid,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+SQL_SESSAO = 'SELECT s.*, e.nome AS exercicio_nome FROM sessions s LEFT JOIN exercicios e ON e.id = s.exercicio_id '
+
+
 @app.get('/api/patients/<int:pid>/sessions')
 @login_obrigatorio
 def historico(pid):
-    sessoes = consulta('SELECT * FROM sessions WHERE patient_id = ? ORDER BY inicio', pid)
+    """Histórico do paciente; ?exercicio_id=<id> limita a um exercício."""
+    filtro = request.args.get('exercicio_id', type=int)
+    sessoes = consulta(SQL_SESSAO + 'WHERE s.patient_id = ? AND (? IS NULL OR s.exercicio_id = ?) ORDER BY s.inicio',
+                       pid, filtro, filtro)
     for s in sessoes:
         s['analise'] = json.loads(s['analise']) if s['analise'] else None
     return jsonify(sessoes)
@@ -396,7 +515,10 @@ def criar_sessao():
     global gravacao
     d = request.get_json(force=True)
     reps_alvo = d.get('reps_alvo')
-    cfg = dict(patient_id=int(d['patient_id']), exercicio=str(d.get('exercicio') or 'flexão de cotovelo'),
+    exercicio = consulta('SELECT id, nome FROM exercicios WHERE id = ?', int(d['exercicio_id']))
+    if not exercicio:
+        falha(404, 'Categoria de exercício não encontrada.')
+    cfg = dict(patient_id=int(d['patient_id']), exercicio_id=exercicio[0]['id'], exercicio=exercicio[0]['nome'],
                braco=str(d.get('braco', 'afetado')), cadencia_alvo=float(d['cadencia_alvo']),
                amp_min=float(d.get('amp_min', 0)), amp_max=float(d.get('amp_max', 60)),
                duracao_min=float(d.get('duracao_min', 3)), reps_alvo=int(reps_alvo) if reps_alvo else None)
@@ -406,9 +528,9 @@ def criar_sessao():
         raise ValueError('braço deve ser "afetado" ou "saudavel"')
     if not consulta('SELECT id FROM patients WHERE id = ?', cfg['patient_id']):
         abort(404)
-    cur = db().execute('INSERT INTO sessions (patient_id, inicio, exercicio, braco, cadencia_alvo, amp_min, amp_max, '
-                       'duracao_min, reps_alvo) VALUES (:patient_id, :inicio, :exercicio, :braco, :cadencia_alvo, '
-                       ':amp_min, :amp_max, :duracao_min, :reps_alvo)',
+    cur = db().execute('INSERT INTO sessions (patient_id, inicio, exercicio, exercicio_id, braco, cadencia_alvo, amp_min, '
+                       'amp_max, duracao_min, reps_alvo) VALUES (:patient_id, :inicio, :exercicio, :exercicio_id, :braco, '
+                       ':cadencia_alvo, :amp_min, :amp_max, :duracao_min, :reps_alvo)',
                        {**cfg, 'inicio': datetime.now().isoformat(timespec='seconds')})
     db().commit()
     sid = cur.lastrowid
@@ -469,7 +591,7 @@ def encerrar_sessao(sid):
 @login_obrigatorio
 def detalhe_sessao(sid):
     """Sessão com repetições e análise completa (inclui séries para os gráficos)."""
-    sessao = consulta('SELECT * FROM sessions WHERE id = ?', sid)
+    sessao = consulta(SQL_SESSAO + 'WHERE s.id = ?', sid)
     if not sessao:
         abort(404)
     sessao = sessao[0]
@@ -493,7 +615,6 @@ def jogo():
 # =====================================================================
 if __name__ == '__main__':
     BRUTOS.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(BANCO) as conexao:
-        conexao.executescript(ESQUEMA)
+    inicializar_banco()
     threading.Thread(target=lambda: asyncio.run(laco_bluetooth()), daemon=True).start()
     app.run(port=5000, threaded=True)
