@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Halter Inteligente — Jogo</title>
+<style>
+  :root { --fundo:#0f172a; --painel:#111827; --borda:#263041; --txt:#e5e7eb; --sub:#94a3b8;
+          --ok:#22c55e; --aviso:#f59e0b; --erro:#ef4444; --acento:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; height:100vh; display:grid; grid-template-columns:1fr 310px;
+         font:15px system-ui,sans-serif; background:var(--fundo); color:var(--txt); }
+  #jogo { position:relative; overflow:hidden; }
+  canvas { display:block; width:100%; height:100%; }
+  #hud { position:absolute; top:12px; left:12px; right:12px; display:flex; gap:8px; flex-wrap:wrap; pointer-events:none; }
+  .chip { background:#000a; padding:6px 10px; border-radius:8px; font-variant-numeric:tabular-nums; }
+  #feedback { font-weight:700; }
+  .tela { position:absolute; inset:0; display:none; place-items:center; background:#000b; text-align:center; padding:20px; }
+  .tela.on { display:grid; }
+  .tela h1 { margin:0 0 12px; font-size:24px; }
+  #resumo table { margin:0 auto 16px; border-collapse:collapse; }
+  #resumo td { padding:6px 14px; border-bottom:1px solid var(--borda); text-align:left; }
+  #resumo td:last-child { text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+  aside { background:var(--painel); border-left:1px solid var(--borda); padding:16px; overflow:auto;
+          display:flex; flex-direction:column; gap:18px; }
+  h2 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--sub); }
+  p { margin:6px 0; }
+  .sub { color:var(--sub); font-size:13px; }
+  label { display:flex; align-items:center; gap:8px; margin:6px 0; }
+  label span { flex:1; }
+  input[type=number] { width:64px; padding:5px; border-radius:6px; border:1px solid var(--borda); background:#0b1220; color:var(--txt); font:inherit; }
+  input[type=range] { flex:1; accent-color:var(--acento); }
+  button { padding:8px 10px; border-radius:8px; border:1px solid #374151; background:#1f2937; color:var(--txt); font:inherit; cursor:pointer; }
+  button.pri { background:var(--acento); border:0; color:#0b1220; font-weight:700; }
+  button:disabled { opacity:.4; cursor:default; }
+  .linha { display:flex; gap:8px; align-items:center; }
+  .linha > button { flex:1; }
+  .linha > button.quadrado { flex:0 0 38px; font-size:18px; padding:4px; }
+  #cad { font-size:30px; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; }
+  @media (max-width:800px) { body { grid-template-columns:1fr; grid-template-rows:60vh auto; } aside { border-left:0; } }
+</style>
+</head>
+<body>
+
+<main id="jogo">
+  <canvas id="tela"></canvas>
+  <div id="hud">
+    <span class="chip">⏱ <b id="hTempo">--:--</b></span>
+    <span class="chip">⭐ <b id="hPontos">0</b></span>
+    <span class="chip">🔁 <b id="hReps">0</b> rep</span>
+    <span class="chip">🎯 <b id="hRitmo">–</b> no ritmo</span>
+    <span class="chip" id="feedback" style="display:none"></span>
+  </div>
+  <div id="aviso" class="tela"><div id="avisoTxt"></div></div>
+  <div id="resumo" class="tela"><div>
+    <h1>Resumo da sessão</h1>
+    <table id="tabResumo"></table>
+    <button class="pri" onclick="novaSessao()">Nova sessão</button>
+  </div></div>
+</main>
+
+<aside>
+  <section>
+    <h2>Haltere</h2>
+    <div class="linha">
+      <button id="btConectar">Conectar haltere</button>
+      <button id="btSimular">Modo simulado</button>
+    </div>
+    <p class="sub" id="status">Desconectado</p>
+  </section>
+
+  <section>
+    <h2>Cadência alvo (profissional)</h2>
+    <div id="cad"></div>
+    <div class="linha">
+      <button class="quadrado" id="menos">−</button>
+      <input id="cadencia" type="range" min="4" max="30" step="1">
+      <button class="quadrado" id="mais">+</button>
+    </div>
+    <p class="sub">Uma repetição a cada <b id="periodo"></b> s. Pode ser ajustada durante a sessão.</p>
+  </section>
+
+  <section>
+    <h2>Amplitude do movimento</h2>
+    <p>θ atual: <b id="thetaAtual">–</b>°</p>
+    <label><span>Posição baixa (°)</span><input id="min" type="number" step="1"><button data-usar="min">atual</button></label>
+    <label><span>Posição alta (°)</span><input id="max" type="number" step="1"><button data-usar="max">atual</button></label>
+    <p class="sub">Peça ao paciente para ir até cada posição e toque em “atual”.</p>
+  </section>
+
+  <section>
+    <h2>Sessão</h2>
+    <label><span>Duração (min)</span><input id="duracao" type="number" min="1" max="30"></label>
+    <div class="linha">
+      <button class="pri" id="btIniciar">Iniciar</button>
+      <button id="btEncerrar" disabled>Encerrar</button>
+    </div>
+  </section>
+</aside>
+
+<script>
+// ===================== CONFIGURAÇÃO =====================
+// A plataforma do profissional abre o jogo com parâmetros na URL, ex.:
+//   game/index.html?sessao=7&cadencia=12&min=0&max=60&duracao=3
+const $ = id => document.getElementById(id);
+const url = new URLSearchParams(location.search);
+const cfg = {
+  cadencia: +url.get('cadencia') || 12,     // repetições por minuto
+  min: +(url.get('min') ?? 0),              // ângulo da posição baixa (°)
+  max: +(url.get('max') ?? 60),             // ângulo da posição alta (°)
+  duracao: +url.get('duracao') || 3,        // minutos
+  sessao: url.get('sessao'),                // id da sessão no backend (opcional)
+};
+const periodo = () => 60 / cfg.cadencia;    // segundos por repetição
+
+// ===================== ESTADO =====================
+let estado = 'aguardando';                  // aguardando | jogando | fim
+let fonte = null, ultimoPacote = 0;         // 'ble' | 'sim'
+let janela = [], theta = 0, vel = 0, tAnt = null;
+let fase = 'baixo', tUltimaRep = null, repMin = 0, repMax = 0, velPico = 0, reps = [];
+let canos = [], proxCano = 0, proxTipo = 'alto', pontos = 0, passados = 0, totalCanos = 0, tJogo = 0, pulso = 0;
+let W = 0, H = 0;
+
+// ===================== DADOS DO ESP32 =====================
+// Pacote: t_ms,theta,ax,ay,az — o jogo usa apenas t e θ
+function receber(linha) {
+  if (linha.startsWith('#')) return;                       // mensagens de status
+  const [t, th] = linha.split(',').map(Number);
+  if (!isFinite(t) || !isFinite(th)) return;               // dado inválido
+  ultimoPacote = performance.now();
+  processar(t / 1000, th);
+}
+
+function processar(t, th) {
+  // Filtro: média móvel de 5 amostras
+  janela.push(th); if (janela.length > 5) janela.shift();
+  const novo = janela.reduce((a, b) => a + b) / janela.length;
+  // Velocidade angular por diferenças finitas: (θᵢ − θᵢ₋₁) / Δt
+  if (tAnt !== null && t > tAnt) vel = (novo - theta) / (t - tAnt);
+  theta = novo; tAnt = t;
+  if (estado === 'jogando') detectarRepeticao(t);
+}
+
+// Progresso do movimento: 0 = posição baixa, 1 = posição alta (funciona mesmo se o ângulo diminuir ao subir)
+const progresso = th => (th - cfg.min) / ((cfg.max - cfg.min) || 1);
+
+function detectarRepeticao(t) {
+  repMin = Math.min(repMin, theta); repMax = Math.max(repMax, theta);
+  velPico = Math.max(velPico, Math.abs(vel));
+  const p = progresso(theta);
+  if (fase === 'baixo' && p > 0.7) fase = 'alto';          // histerese: sobe acima de 70 %
+  else if (fase === 'alto' && p < 0.3) {                    // ... e volta abaixo de 30 % → 1 repetição
+    fase = 'baixo';
+    registrarRepeticao(t);
+  }
+}
+
+function registrarRepeticao(t) {
+  const T = periodo();
+  const dur = tUltimaRep === null ? null : t - tUltimaRep; // período desde a repetição anterior
+  const noRitmo = dur === null ? null : Math.abs(dur - T) <= 0.2 * T;
+  const rep = {
+    n: reps.length + 1, t_ms: Math.round(t * 1000),
+    amplitude: +(repMax - repMin).toFixed(1), vel_pico: +velPico.toFixed(1),
+    duracao_s: dur === null ? null : +dur.toFixed(2), no_ritmo: noRitmo, cadencia: cfg.cadencia,
+  };
+  reps.push(rep);
+  enviar('/reps', rep);
+  if (noRitmo) pontos += 5;
+  if (noRitmo === null) mostrarFeedback('Boa! Continue no ritmo', 'var(--acento)');
+  else if (noRitmo) mostrarFeedback('No ritmo ✓', 'var(--ok)');
+  else mostrarFeedback(dur < T ? 'Mais devagar' : 'Mais rápido', 'var(--aviso)');
+  tUltimaRep = t; repMin = repMax = theta; velPico = 0;
+}
+
+// --- Bluetooth (Web Bluetooth, serviço UART da Nordic usado no firmware) ---
+const UART = '6e400001-b5a3-f393-e0a9-e50e24dcca9e', TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+async function conectar() {
+  if (!navigator.bluetooth) return alert('Este navegador não tem Web Bluetooth. Use Chrome ou Edge.');
+  try {
+    const disp = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'Haltere' }], optionalServices: [UART] });
+    status('Conectando…');
+    const servidor = await disp.gatt.connect();
+    const tx = await (await servidor.getPrimaryService(UART)).getCharacteristic(TX);
+    tx.addEventListener('characteristicvaluechanged', e => receber(new TextDecoder().decode(e.target.value)));
+    await tx.startNotifications();
+    disp.addEventListener('gattserverdisconnected', () => status('⚠️ Haltere desconectado'));
+    pararSimulacao(); fonte = 'ble'; status('✅ Conectado: ' + disp.name);
+  } catch (e) { status('Falha na conexão: ' + e.message); }
+}
+
+// --- Modo simulado: um "paciente virtual" que segue a trilha dos canos, para testar sem o haltere ---
+let simTimer = null;
+function simular() {
+  pararSimulacao(); fonte = 'sim'; status('🧪 Modo simulado');
+  let fs = 0, tAntSim = performance.now();
+  simTimer = setInterval(() => {
+    const agora = performance.now();
+    fs += 2 * Math.PI * (agora - tAntSim) / 1000 / periodo(); tAntSim = agora;
+    let alvo = 0.5 - 0.5 * Math.cos(fs);                          // fora do jogo: senoide na cadência
+    const x = W * 0.25, prox = canos.find(c => c.x + LARG / 2 > x), ant = canos.findLast(c => c.x + LARG / 2 <= x);
+    if (estado === 'jogando' && prox) {                           // no jogo: vai de um cano ao próximo
+      const p1 = prox.tipo === 'alto' ? 1 : 0, p0 = ant ? 1 - p1 : progresso(theta);
+      const x0 = ant ? ant.x + LARG / 2 : 0, f = Math.min(1, Math.max(0, (x - x0) / (prox.x + LARG / 2 - x0)));
+      alvo = p0 + (p1 - p0) * (0.5 - 0.5 * Math.cos(Math.PI * f));
+    }
+    const th = cfg.min + (cfg.max - cfg.min) * alvo * (0.9 + 0.1 * Math.sin(agora / 4000)) + (Math.random() - 0.5) * 2;
+    receber(`${Math.round(agora)},${th.toFixed(2)}`);
+  }, 20);
+}
+function pararSimulacao() { clearInterval(simTimer); simTimer = null; }
+
+// ===================== BACKEND (opcional) =====================
+function enviar(caminho, dados) {
+  if (!cfg.sessao) return;                                   // sem sessão = jogo funciona sozinho
+  fetch(`/api/sessions/${cfg.sessao}${caminho}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados),
+  }).catch(() => {});
+}
+
+// ===================== SESSÃO =====================
+function iniciar() {
+  if (!fonte) return alert('Conecte o haltere ou use o modo simulado.');
+  estado = 'jogando';
+  canos = []; proxCano = 1; proxTipo = 'alto'; pontos = passados = totalCanos = 0; tJogo = 0;
+  reps = []; tUltimaRep = null; repMin = repMax = theta; velPico = 0;
+  fase = progresso(theta) > 0.5 ? 'alto' : 'baixo';
+  $('btIniciar').disabled = true; $('btEncerrar').disabled = false; $('resumo').classList.remove('on');
+}
+
+function encerrar() {
+  if (estado !== 'jogando') return;
+  estado = 'fim';
+  const media = v => v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+  const avaliadas = reps.filter(r => r.no_ritmo !== null);
+  const ind = {
+    duracao_s: Math.round(tJogo), total_reps: reps.length,
+    aderencia_cadencia: avaliadas.length ? avaliadas.filter(r => r.no_ritmo).length / avaliadas.length : 0,
+    amp_media: +media(reps.map(r => r.amplitude)).toFixed(1),
+    vel_media: +media(reps.map(r => r.vel_pico)).toFixed(1),
+    obstaculos: `${passados}/${totalCanos}`, pontuacao: pontos,
+  };
+  enviar('/end', ind);
+  $('tabResumo').innerHTML = [
+    ['Duração', formatarTempo(ind.duracao_s)], ['Repetições', ind.total_reps],
+    ['Repetições no ritmo', Math.round(ind.aderencia_cadencia * 100) + ' %'],
+    ['Amplitude média', ind.amp_media + '°'], ['Velocidade de pico média', ind.vel_media + ' °/s'],
+    ['Obstáculos superados', ind.obstaculos], ['Pontuação', ind.pontuacao],
+  ].map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  $('resumo').classList.add('on');
+  $('btIniciar').disabled = false; $('btEncerrar').disabled = true;
+}
+function novaSessao() { estado = 'aguardando'; canos = []; $('resumo').classList.remove('on'); }
+
+// ===================== JOGO =====================
+const LARG = 64;                                            // largura do cano
+const yDe = th => {                                         // ângulo → altura na tela
+  const p = Math.min(1.1, Math.max(-0.1, progresso(th)));
+  return H * 0.82 - p * H * 0.64;
+};
+const passaro = () => ({ x: W * 0.25, y: yDe(theta), r: 18 });
+
+function criarCano() {
+  // Canos alternam: abertura no alto (levantar o haltere) e embaixo (abaixar)
+  canos.push({ x: W, tipo: proxTipo, yAbre: yDe(proxTipo === 'alto' ? cfg.max : cfg.min), bateu: false, contado: false });
+  proxTipo = proxTipo === 'alto' ? 'baixo' : 'alto';
+}
+
+function atualizar(dt) {
+  tJogo += dt;
+  pulso += dt / (periodo() / 2);
+  const vx = W * 0.22;                                      // velocidade dos canos (px/s)
+  proxCano -= dt;
+  if (proxCano <= 0) { criarCano(); proxCano += periodo() / 2; } // um cano a cada meia repetição
+  const p = passaro(), gap = H * 0.34;
+  for (const c of canos) {
+    c.x -= vx * dt;
+    c.yAbre = yDe(c.tipo === 'alto' ? cfg.max : cfg.min);   // segue ajustes de amplitude
+    const sobrepoe = c.x < p.x + p.r * 0.6 && c.x + LARG > p.x - p.r * 0.6;
+    if (sobrepoe && Math.abs(p.y - c.yAbre) > gap / 2 - p.r * 0.6) c.bateu = true;
+    if (!c.contado && c.x + LARG < p.x - p.r) {
+      c.contado = true; totalCanos++;
+      if (!c.bateu) { passados++; pontos += 10; bip(880); } else bip(220);
+    }
+  }
+  canos = canos.filter(c => c.x > -LARG);
+  if (tJogo >= cfg.duracao * 60) encerrar();
+}
+
+function desenhar() {
+  const g = ctx;
+  // Céu e chão
+  const ceu = g.createLinearGradient(0, 0, 0, H);
+  ceu.addColorStop(0, '#7dd3fc'); ceu.addColorStop(1, '#e0f2fe');
+  g.fillStyle = ceu; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#a3e635'; g.fillRect(0, H - 14, W, 14);
+
+  // Linhas de referência das posições alta e baixa
+  g.setLineDash([4, 6]); g.strokeStyle = '#0f172a33'; g.lineWidth = 1;
+  for (const [th, txt] of [[cfg.max, 'alto'], [cfg.min, 'baixo']]) {
+    g.beginPath(); g.moveTo(0, yDe(th)); g.lineTo(W, yDe(th)); g.stroke();
+    g.fillStyle = '#0f172a88'; g.font = '12px system-ui'; g.fillText(txt, 8, yDe(th) - 6);
+  }
+
+  // Trilha ideal: liga as aberturas dos canos e mostra o ritmo esperado
+  const p = passaro();
+  if (canos.length) {
+    g.setLineDash([8, 8]); g.strokeStyle = '#ffffffcc'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(p.x, p.y);
+    for (const c of canos) if (c.x + LARG / 2 > p.x) g.lineTo(c.x + LARG / 2, c.yAbre);
+    g.stroke();
+  }
+  g.setLineDash([]);
+
+  // Canos
+  const gap = H * 0.34;
+  for (const c of canos) {
+    const cor = c.bateu ? '#ef4444' : c.contado ? '#16a34a' : '#22c55e';
+    g.fillStyle = cor;
+    g.fillRect(c.x, -10, LARG, c.yAbre - gap / 2 + 10);
+    g.fillRect(c.x, c.yAbre + gap / 2, LARG, H);
+    g.fillStyle = '#00000033';                              // bordas das bocas
+    g.fillRect(c.x - 4, c.yAbre - gap / 2 - 14, LARG + 8, 14);
+    g.fillRect(c.x - 4, c.yAbre + gap / 2, LARG + 8, 14);
+  }
+
+  // Pássaro (inclina conforme a velocidade do movimento)
+  g.save(); g.translate(p.x, p.y);
+  g.rotate(Math.max(-0.6, Math.min(0.6, -vel * Math.sign(cfg.max - cfg.min) / 200)));
+  g.fillStyle = '#facc15'; g.beginPath(); g.arc(0, 0, p.r, 0, 7); g.fill();
+  g.fillStyle = '#f59e0b'; g.beginPath(); g.ellipse(-6, 4, 9, 5, -0.4, 0, 7); g.fill();        // asa
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(7, -6, 6, 0, 7); g.fill();
+  g.fillStyle = '#111'; g.beginPath(); g.arc(9, -6, 2.5, 0, 7); g.fill();
+  g.fillStyle = '#fb923c'; g.beginPath(); g.moveTo(14, 0); g.lineTo(26, 4); g.lineTo(14, 8); g.fill(); // bico
+  g.restore();
+
+  // Metrônomo: pulsa a cada meia repetição
+  if (estado === 'jogando') {
+    const r = 10 + 6 * Math.max(0, 1 - (pulso % 1) * 3);
+    g.fillStyle = Math.floor(pulso) % 2 ? '#0ea5e9' : '#f97316';
+    g.beginPath(); g.arc(W - 28, H - 40, r, 0, 7); g.fill();
+  }
+}
+
+// ===================== LAÇO PRINCIPAL =====================
+let ultimoQuadro = performance.now();
+function quadro(agora) {
+  const dt = Math.min((agora - ultimoQuadro) / 1000, 0.1); ultimoQuadro = agora;
+  // Dados válidos e recentes? (pacote nos últimos 300 ms)
+  const semDados = !fonte || agora - ultimoPacote > 300;
+  if (estado === 'jogando' && semDados) aviso('📡 Sinal do haltere perdido<br><span class="sub">Feedback pausado — verifique a conexão</span>');
+  else if (estado === 'aguardando' && !fonte) aviso('Conecte o haltere ou use o modo simulado');
+  else if (estado === 'aguardando') aviso('Ajuste cadência e amplitude e toque em <b>Iniciar</b>');
+  else aviso('');
+  if (estado === 'jogando' && !semDados) atualizar(dt);
+  desenhar();
+  atualizarHud();
+  requestAnimationFrame(quadro);
+}
+
+// ===================== INTERFACE =====================
+const canvas = $('tela'), ctx = canvas.getContext('2d');
+function redimensionar() {
+  const dpr = devicePixelRatio || 1;
+  W = canvas.clientWidth; H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+const formatarTempo = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const status = txt => $('status').textContent = txt;
+function aviso(html) { $('avisoTxt').innerHTML = html; $('aviso').classList.toggle('on', !!html); }
+let fbTimer;
+function mostrarFeedback(txt, cor) {
+  const f = $('feedback'); f.textContent = txt; f.style.color = cor; f.style.display = '';
+  clearTimeout(fbTimer); fbTimer = setTimeout(() => f.style.display = 'none', 1800);
+}
+function atualizarHud() {
+  $('hTempo').textContent = formatarTempo(estado === 'jogando' ? Math.max(0, cfg.duracao * 60 - tJogo) : cfg.duracao * 60);
+  $('hPontos').textContent = pontos;
+  $('hReps').textContent = reps.length;
+  const av = reps.filter(r => r.no_ritmo !== null);
+  $('hRitmo').textContent = av.length ? Math.round(100 * av.filter(r => r.no_ritmo).length / av.length) + ' %' : '–';
+  $('thetaAtual').textContent = fonte ? theta.toFixed(1) : '–';
+}
+let audio;
+function bip(freq) {
+  try {
+    audio ??= new AudioContext();
+    const o = audio.createOscillator(), v = audio.createGain();
+    o.frequency.value = freq; v.gain.setValueAtTime(0.12, audio.currentTime);
+    v.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.15);
+    o.connect(v).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.15);
+  } catch {}
+}
+
+// Controles do profissional — alterações valem na hora, inclusive durante a sessão
+function definirCadencia(v) {
+  cfg.cadencia = Math.max(4, Math.min(30, v));
+  $('cadencia').value = cfg.cadencia;
+  $('cad').textContent = cfg.cadencia + ' rep/min';
+  $('periodo').textContent = periodo().toFixed(1);
+  proxCano = Math.min(proxCano, periodo() / 2);
+}
+$('cadencia').oninput = e => definirCadencia(+e.target.value);
+$('menos').onclick = () => definirCadencia(cfg.cadencia - 1);
+$('mais').onclick = () => definirCadencia(cfg.cadencia + 1);
+for (const k of ['min', 'max', 'duracao']) {
+  $(k).value = cfg[k];
+  $(k).oninput = e => { if (e.target.value !== '') cfg[k] = +e.target.value; };
+}
+document.querySelectorAll('[data-usar]').forEach(b => b.onclick = () => {
+  if (!fonte) return;
+  const k = b.dataset.usar; cfg[k] = Math.round(theta); $(k).value = cfg[k];
+});
+$('btConectar').onclick = conectar;
+$('btSimular').onclick = simular;
+$('btIniciar').onclick = iniciar;
+$('btEncerrar').onclick = encerrar;
+
+definirCadencia(cfg.cadencia);
+addEventListener('resize', redimensionar);
+redimensionar();
+requestAnimationFrame(quadro);
+</script>
+</body>
+</html>
