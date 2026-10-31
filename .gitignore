@@ -20,3 +20,6 @@ __pycache__/
 # Resultados locais de análise
 outputs/
 data/raw/
+
+# Banco de dados local
+data/*.db

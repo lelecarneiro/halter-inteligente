@@ -115,7 +115,7 @@ const periodo = () => 60 / cfg.cadencia;    // segundos por repetição
 
 // ===================== ESTADO =====================
 let estado = 'aguardando';                  // aguardando | jogando | fim
-let fonte = null, ultimoPacote = 0;         // 'ble' | 'sim'
+let fonte = null, ultimoPacote = 0;         // 'haltere' | 'sim'
 let janela = [], theta = 0, vel = 0, tAnt = null;
 let fase = 'baixo', tUltimaRep = null, repMin = 0, repMax = 0, velPico = 0, reps = [];
 let canos = [], proxCano = 0, proxTipo = 'alto', pontos = 0, passados = 0, totalCanos = 0, tJogo = 0, pulso = 0;
@@ -173,20 +173,16 @@ function registrarRepeticao(t) {
   tUltimaRep = t; repMin = repMax = theta; velPico = 0;
 }
 
-// --- Bluetooth (Web Bluetooth, serviço UART da Nordic usado no firmware) ---
-const UART = '6e400001-b5a3-f393-e0a9-e50e24dcca9e', TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
-async function conectar() {
-  if (!navigator.bluetooth) return alert('Este navegador não tem Web Bluetooth. Use Chrome ou Edge.');
-  try {
-    const disp = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'Haltere' }], optionalServices: [UART] });
-    status('Conectando…');
-    const servidor = await disp.gatt.connect();
-    const tx = await (await servidor.getPrimaryService(UART)).getCharacteristic(TX);
-    tx.addEventListener('characteristicvaluechanged', e => receber(new TextDecoder().decode(e.target.value)));
-    await tx.startNotifications();
-    disp.addEventListener('gattserverdisconnected', () => status('⚠️ Haltere desconectado'));
-    pararSimulacao(); fonte = 'ble'; status('✅ Conectado: ' + disp.name);
-  } catch (e) { status('Falha na conexão: ' + e.message); }
+// --- Haltere real: o backend lê o Bluetooth e repassa cada leitura em tempo real (SSE) ---
+let stream = null;
+function conectar() {
+  if (location.protocol === 'file:') return alert('Abra o jogo pelo backend: http://localhost:5000/game/');
+  pararSimulacao(); fonte = 'haltere';
+  if (stream) return;
+  stream = new EventSource('/api/stream');                      // reconecta sozinho se o backend cair
+  stream.addEventListener('dado', e => { if (fonte === 'haltere') receber(e.data); });
+  stream.addEventListener('status', e => { if (fonte === 'haltere') status('Haltere: ' + e.data); });
+  stream.onerror = () => { if (fonte === 'haltere') status('⚠️ Backend fora do ar — tentando reconectar…'); };
 }
 
 // --- Modo simulado: um "paciente virtual" que segue a trilha dos canos, para testar sem o haltere ---
@@ -349,7 +345,7 @@ function quadro(agora) {
   // Dados válidos e recentes? (pacote nos últimos 300 ms)
   const semDados = !fonte || agora - ultimoPacote > 300;
   if (estado === 'jogando' && semDados) aviso('📡 Sinal do haltere perdido<br><span class="sub">Feedback pausado — verifique a conexão</span>');
-  else if (estado === 'aguardando' && !fonte) aviso('Conecte o haltere ou use o modo simulado');
+  else if (estado === 'aguardando' && semDados) aviso(fonte ? '📡 Aguardando dados do haltere…<br><span class="sub">Ligue o haltere e aguarde a conexão Bluetooth</span>' : 'Conecte o haltere ou use o modo simulado');
   else if (estado === 'aguardando') aviso('Ajuste cadência e amplitude e toque em <b>Iniciar</b>');
   else aviso('');
   if (estado === 'jogando' && !semDados) atualizar(dt);
@@ -417,6 +413,7 @@ $('btIniciar').onclick = iniciar;
 $('btEncerrar').onclick = encerrar;
 
 definirCadencia(cfg.cadencia);
+if (location.protocol.startsWith('http')) conectar();       // aberto pelo backend: já escuta o haltere
 addEventListener('resize', redimensionar);
 redimensionar();
 requestAnimationFrame(quadro);

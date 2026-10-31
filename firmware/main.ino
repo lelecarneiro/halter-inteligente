@@ -73,6 +73,7 @@ void setup() {
 
   // 4. BLE
   BLEDevice::init("Haltere");
+  BLEDevice::setMTU(100);  // pacote inteiro em uma notificação (o padrão corta em 20 bytes)
   BLEServer *servidor = BLEDevice::createServer();
   servidor->setCallbacks(new Callbacks());
   BLEService *servico = servidor->createService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
