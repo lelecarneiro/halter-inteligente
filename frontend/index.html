@@ -74,6 +74,7 @@
   button.perigo { color:var(--erro); border-color:var(--erro); }
   .botoes { display:flex; gap:8px; }
   .sub-cartao { border:1px dashed var(--borda); border-radius:10px; padding:12px; margin:-4px 0 12px; }
+  .bolinha { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
   .foco { text-transform:none; letter-spacing:0; color:var(--txt); }
   details summary { cursor:pointer; color:var(--acento); font-size:14px; }
   @media (max-width:900px) { .grade2, .grade-paciente, .graficos, .heroi { grid-template-columns:1fr; } .multiplos { grid-template-columns:1fr 1fr; } }
@@ -114,9 +115,9 @@ const aoEnviar = (form, acao) => form.onsubmit = async e => {
 
 // ===================== GRÁFICOS =====================
 let graficos = [];
-function grafico(id, config) {
+function grafico(id, config, lista = graficos) {
   const el = document.getElementById(id);
-  if (el && window.Chart) graficos.push(new Chart(el, config));   // sem internet para o CDN: só os gráficos somem
+  if (el && window.Chart) lista.push(new Chart(el, config));   // sem internet para o CDN: só os gráficos somem
 }
 function opcoes({ x = '', y = '', xTipo = 'linear', legenda = true, yMin, yMax, un = '' } = {}) {
   const txt2 = cor('--txt2'), grade = cor('--grade');
@@ -184,18 +185,23 @@ async function telaPacientes() {
   });
 }
 
+// Cores fixas por braço em toda a plataforma (e no jogo): saudável = azul, afetado = laranja
+const BRACOS = [{ k: 'saudavel', nome: 'Saudável', cor: '--s1' }, { k: 'afetado', nome: 'Afetado', cor: '--s2' }];
+const doBraco = (s, b) => s.analise?.bracos?.[b];
+const pct = v => v == null ? null : v * 100;
+
 // Métricas acompanhadas ao longo das sessões (uma por gráfico: unidades diferentes nunca dividem eixo)
 const EVOLUCAO = [
-  { id: 'amp', nome: 'Amplitude média (°)', v: s => s.amp_media, un: '°' },
-  { id: 'ritmo', nome: 'Repetições no ritmo (%)', v: s => s.aderencia_cadencia == null ? null : s.aderencia_cadencia * 100, un: ' %' },
-  { id: 'traj', nome: 'Erro de trajetória — RMSE (°)', v: s => s.analise?.metricas.rmse_trajetoria, un: '°' },
-  { id: 'tremor', nome: 'Tremor — RMS (m/s²)', v: s => s.analise?.metricas.rms_tremor, un: ' m/s²' },
-  { id: 'jerk', nome: 'Jerk médio (m/s³)', v: s => s.analise?.metricas.jerk_medio, un: ' m/s³' },
-  { id: 'sx', nome: 'Compensação lateral — Sx (cm)', v: s => s.analise?.metricas.s_x == null ? null : s.analise.metricas.s_x * 100, un: ' cm' },
+  { id: 'amp', nome: 'Amplitude média (°)', v: (s, b) => doBraco(s, b)?.jogo?.amp_media, un: '°' },
+  { id: 'ritmo', nome: 'Repetições no ritmo (%)', v: (s, b) => pct(doBraco(s, b)?.jogo?.aderencia_cadencia), un: ' %' },
+  { id: 'traj', nome: 'Erro de trajetória — RMSE (°)', v: (s, b) => doBraco(s, b)?.metricas?.rmse_trajetoria, un: '°' },
+  { id: 'tremor', nome: 'Tremor — RMS (m/s²)', v: (s, b) => doBraco(s, b)?.metricas?.rms_tremor, un: ' m/s²' },
+  { id: 'jerk', nome: 'Jerk médio (m/s³)', v: (s, b) => doBraco(s, b)?.metricas?.jerk_medio, un: ' m/s³' },
+  { id: 'sx', nome: 'Compensação lateral — Sx (cm)', v: (s, b) => pct(doBraco(s, b)?.metricas?.s_x), un: ' cm' },
 ];
 const NOTAS = [
   { k: 'trajetoria', nome: 'Trajetória', peso: 30, cor: '--s2', metodo: 'RMSE vs. trajetória ideal' },
-  { k: 'simetria', nome: 'Simetria', peso: 30, cor: '--s3', metodo: 'RMSE vs. braço saudável' },
+  { k: 'simetria', nome: 'Simetria', peso: 30, cor: '--s3', metodo: 'RMSE vs. braço saudável na sessão' },
   { k: 'estabilidade', nome: 'Estabilidade', peso: 25, cor: '--s4', metodo: 'Desvio padrão lateral Sx' },
   { k: 'suavidade', nome: 'Suavidade', peso: 15, cor: '--s5', metodo: 'Jerk médio' },
 ];
@@ -240,29 +246,33 @@ async function telaPaciente(id) {
             <button type="button" id="btCancelarCategoria">Cancelar</button></div>
         </div>
         <p class="mudo pequeno" id="descExercicio"></p>
-        <label>Braço<select name="braco">
-          <option value="afetado">Afetado</option><option value="saudavel">Saudável (referência de simetria)</option></select></label>
+        <div class="dupla">
+          <label>Nº de séries<input name="series_alvo" type="number" min="1" max="10" required></label>
+          <label>Repetições por série<input name="reps_alvo" type="number" min="1" max="200" placeholder="livre"></label>
+        </div>
+        <label>Cada série começa pelo braço<select name="ordem">
+          <option value="saudavel">Saudável → depois o afetado</option><option value="afetado">Afetado → depois o saudável</option></select></label>
         <div class="dupla">
           <label>Cadência (rep/min)<input name="cadencia_alvo" type="number" min="4" max="30" required></label>
-          <label>Nº de repetições<input name="reps_alvo" type="number" min="1" max="200" placeholder="livre"></label>
+          <label>Duração máx. (min/série)<input name="duracao_min" type="number" min="1" max="30" required></label>
         </div>
         <div class="dupla">
           <label>Posição baixa (°)<input name="amp_min" type="number" required></label>
           <label>Posição alta (°)<input name="amp_max" type="number" required></label>
         </div>
-        <label>Duração máxima (min)<input name="duracao_min" type="number" min="1" max="30" required></label>
         <button class="pri">Criar sessão e abrir o jogo</button>
-        <p class="mudo pequeno">Os campos vêm da última sessão deste exercício. Cadência e amplitude também podem ser ajustadas no jogo.</p>
+        <p class="mudo pequeno" id="resumoPlano"></p>
       </form>
 
       <section class="cartao">
-        <h2>Evolução</h2>
-        ${comSessoes.length ? `<div class="filtros">
-          Exercício <select id="fExercicio">${comSessoes.map(e => `<option value="${e.id}" ${e.id === foco ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select>
-          Braço <select id="fBraco"><option value="afetado">Afetado</option><option value="saudavel">Saudável</option></select>
+        <h2>Evolução — <span class="foco"></span></h2>
+        ${comSessoes.length > 1 ? `<div class="filtros">Exercício
+          <select id="fExercicio">${comSessoes.map(e => `<option value="${e.id}" ${e.id === foco ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select>
         </div>` : ''}
-        <h3>Score geral e notas (0 a 100)</h3>
-        <div class="caixa-grafico alto"><canvas id="gNotas"></canvas></div>
+        <h3>Score geral por braço (0 a 100)</h3>
+        <div class="caixa-grafico alto"><canvas id="gScore"></canvas></div>
+        <h3 style="margin-top:16px">Amplitude do braço afetado em % do saudável</h3>
+        <div class="caixa-grafico"><canvas id="gSimetria"></canvas></div>
         <p class="mudo pequeno" id="semEvolucao"></p>
       </section>
     </div>
@@ -289,10 +299,17 @@ async function telaPaciente(id) {
 
   // ---- Formulário de nova sessão: categoria e valores da última sessão desse exercício ----
   const form = $('#fSessao'), sel = $('#selExercicio');
+  const resumirPlano = () => {
+    const n = +form.series_alvo.value || 0, r = +form.reps_alvo.value;
+    const [a, b] = form.ordem.value === 'afetado' ? ['afetado', 'saudável'] : ['saudável', 'afetado'];
+    $('#resumoPlano').textContent = n ? `${n} ${n === 1 ? 'série' : 'séries'} × 2 braços = ${2 * n} etapas no jogo`
+      + (r ? ` (${r} repetições cada, ${2 * n * r} no total)` : '') + `. Em cada série: braço ${a}, depois braço ${b}.` : '';
+  };
   function preencher() {
     const e = exercicio(+sel.value), u = ultimaDe(+sel.value) || {};
-    form.cadencia_alvo.value = u.cadencia_alvo || 12; form.reps_alvo.value = u.reps_alvo || '';
-    form.amp_min.value = u.amp_min ?? 0; form.amp_max.value = u.amp_max ?? 60; form.duracao_min.value = u.duracao_min || 3;
+    form.cadencia_alvo.value = u.cadencia_alvo || 12; form.reps_alvo.value = u.reps_alvo || 10;
+    form.series_alvo.value = u.series_alvo || 3; form.ordem.value = u.ordem || 'saudavel';
+    form.amp_min.value = u.amp_min ?? 0; form.amp_max.value = u.amp_max ?? 60; form.duracao_min.value = u.duracao_min || 2;
     $('#descExercicio').innerHTML = esc(e?.descricao || '') + (e && !e.padrao && !e.sessoes
       ? ` <a href="#" id="lkExcluirCategoria">Excluir esta categoria</a>` : '');
     const lk = $('#lkExcluirCategoria');
@@ -301,7 +318,9 @@ async function telaPaciente(id) {
       if (!confirm(`Excluir a categoria "${e.nome}"?`)) return;
       try { await api(`/api/exercicios/${e.id}`, { method: 'DELETE' }); rota(); } catch (erro) { alert(erro.message); }
     };
+    resumirPlano();
   }
+  form.oninput = resumirPlano;
   let anterior = sel.value;
   sel.onchange = () => {
     const nova = sel.value === 'nova';
@@ -326,171 +345,233 @@ async function telaPaciente(id) {
   });
   preencher();
 
-  // ---- Evolução e histórico: sempre de um exercício por vez ----
+  // ---- Evolução e histórico: sempre de um exercício por vez, com os dois braços ----
   function atualizar() {
-    const eid = $('#fExercicio') ? +$('#fExercicio').value : null, braco = $('#fBraco')?.value || 'afetado';
+    const eid = $('#fExercicio') ? +$('#fExercicio').value : comSessoes[0]?.id ?? null;
     const doExercicio = sessoes.filter(s => s.exercicio_id === eid);
     document.querySelectorAll('.foco').forEach(el => el.textContent = exercicio(eid)?.nome || 'sem sessões');
-    desenharEvolucao(doExercicio, braco);
+    desenharEvolucao(doExercicio);
+    const par = (s, f, casas, un) => BRACOS.map(b => num(f(doBraco(s, b.k)), casas, un)).join(' · ');
     $('#tabelaSessoes').innerHTML = doExercicio.length ? `<table>
-      <tr><th>Data</th><th>Braço</th><th class="num">Cadência</th><th class="num">Reps</th><th class="num">No ritmo</th>
-          <th class="num">Amplitude</th><th class="num">Score geral</th><th></th></tr>
+      <tr><th>Data</th><th class="num">Séries</th><th class="num">Reps<br><span class="mudo">saud. · afet.</span></th>
+          <th class="num">Amplitude<br><span class="mudo">saud. · afet.</span></th><th class="num">Afetado vs. saudável</th>
+          <th class="num">Score<br><span class="mudo">saud. · afet.</span></th><th></th></tr>
       ${doExercicio.slice().reverse().map(s => `<tr>
-        <td>${dataHora(s.inicio)}</td><td>${nomeBraco(s.braco)}</td><td class="num">${num(s.cadencia_alvo, 0)}/min</td>
-        <td class="num">${s.total_reps ?? '—'}</td><td class="num">${s.aderencia_cadencia == null ? '—' : num(s.aderencia_cadencia * 100, 0, ' %')}</td>
-        <td class="num">${num(s.amp_media, 1, '°')}</td><td class="num"><b>${num(s.score_geral, 0)}</b></td>
+        <td>${dataHora(s.inicio)}</td><td class="num">${s.series_alvo ?? '—'}</td>
+        <td class="num">${par(s, b => b?.jogo?.total_reps, 0, '')}</td>
+        <td class="num">${par(s, b => b?.jogo?.amp_media, 0, '°')}</td>
+        <td class="num">${num(s.analise?.simetria?.excursao_pct, 0, ' %')}</td>
+        <td class="num"><b>${par(s, b => b?.score_geral, 0, '')}</b></td>
         <td class="num">${s.fim ? `<a href="#/sessao/${s.id}">Ver análise</a>` : '<span class="mudo">em andamento</span>'}</td></tr>`).join('')}
     </table>` : '<p class="mudo">Nenhuma sessão ainda.</p>';
   }
-  if ($('#fExercicio')) { $('#fExercicio').onchange = atualizar; $('#fBraco').onchange = atualizar; }
+  if ($('#fExercicio')) $('#fExercicio').onchange = atualizar;
   atualizar();
 }
 
-function desenharEvolucao(sessoes, braco) {
+function desenharEvolucao(sessoes) {
   graficos.forEach(g => g.destroy()); graficos = [];
-  const feitas = sessoes.filter(s => s.fim && s.braco === braco);
+  const feitas = sessoes.filter(s => s.fim && s.analise);
   const rotulos = feitas.map((s, i) => `${i + 1}ª · ${dataCurta(s.inicio)}`);
-  $('#semEvolucao').textContent = feitas.length ? '' : `Nenhuma sessão concluída deste exercício com o braço ${nomeBraco(braco).toLowerCase()}.`;
+  $('#semEvolucao').textContent = feitas.length ? '' : 'A evolução aparece após a primeira sessão concluída deste exercício.';
   const comPontos = { pointRadius: 4, pointHoverRadius: 6, spanGaps: true, pointBorderColor: cor('--cartao'), pointBorderWidth: 2 };
-  grafico('gNotas', {
-    type: 'line',
-    data: { labels: rotulos, datasets: [
-      serie('Score geral', feitas.map(s => s.score_geral), '--s1', { ...comPontos, borderWidth: 3 }),
-      ...NOTAS.map(n => serie(n.nome, feitas.map(s => s.analise?.notas[n.k] ?? null), n.cor, comPontos)),
-    ] },
-    options: opcoes({ xTipo: 'category', yMin: 0, yMax: 100 }),
-  });
+  const porBraco = f => BRACOS.map(b => serie(b.nome, feitas.map(s => f(s, b.k) ?? null), b.cor, comPontos));
+  grafico('gScore', { type: 'line', data: { labels: rotulos, datasets: porBraco((s, b) => doBraco(s, b)?.score_geral) },
+    options: opcoes({ xTipo: 'category', yMin: 0, yMax: 100 }) });
+  grafico('gSimetria', { type: 'line', data: { labels: rotulos, datasets: [
+      serie('Amplitude do afetado (% do saudável)', feitas.map(s => s.analise?.simetria?.excursao_pct ?? null), '--s3', comPontos),
+      serie('Igual ao saudável (100 %)', feitas.map(() => 100), '--neutro', { borderDash: [6, 5], pointRadius: 0 }),
+    ] }, options: opcoes({ xTipo: 'category', yMin: 0, un: ' %' }) });
   for (const m of EVOLUCAO) {
-    grafico('ev_' + m.id, {
-      type: 'line',
-      data: { labels: rotulos, datasets: [serie(m.nome, feitas.map(m.v), '--s1', comPontos)] },
-      options: opcoes({ xTipo: 'category', legenda: false, un: m.un }),
-    });
+    grafico('ev_' + m.id, { type: 'line', data: { labels: rotulos, datasets: porBraco(m.v) },
+      options: opcoes({ xTipo: 'category', un: m.un }) });
   }
 }
 
 async function telaSessao(id) {
   const s = await api(`/api/sessions/${id}`);
-  const a = s.analise, m = a?.metricas || {};
+  const a = s.analise, sim = a?.simetria;
+  const br = b => a?.bracos?.[b] || {};
+  const af = br('afetado'), sa = br('saudavel');
   const tile = (rotulo, valor, metodo = '') =>
     `<div class="tile"><div class="rotulo">${rotulo}</div><div class="valor">${valor}</div><div class="metodo">${metodo}</div></div>`;
+  // Tabela lado a lado: [rótulo, valor do braço, casas, unidade, quanto menor melhor?]
+  const LINHAS = [
+    ['Repetições', b => b.jogo?.total_reps, 0, ''],
+    ['Repetições no ritmo', b => pct(b.jogo?.aderencia_cadencia), 0, ' %'],
+    ['Amplitude média (jogo)', b => b.jogo?.amp_media, 1, '°'],
+    ['Excursão da trajetória média', b => b.metricas?.excursao, 1, '°'],
+    ['Velocidade angular de pico', b => b.jogo?.vel_media, 0, ' °/s'],
+    ['Velocidade linear de pico (5.5)', b => b.metricas?.vel_linear_pico, 2, ' m/s'],
+    ['Erro de trajetória — RMSE (5.9)', b => b.metricas?.rmse_trajetoria, 1, '°'],
+    ['Índice de suavidade (5.6)', b => b.metricas?.i_suavidade, 1, ''],
+    ['Jerk médio (5.6)', b => b.metricas?.jerk_medio, 2, ' m/s³'],
+    ['Tremor — RMS (5.7)', b => b.metricas?.rms_tremor, 3, ' m/s²'],
+    ['Compensação lateral — Sx (5.8)', b => pct(b.metricas?.s_x), 2, ' cm'],
+    ['Posição lateral média μx (5.8)', b => pct(b.metricas?.mu_x), 2, ' cm'],
+    ['Pontuação no jogo', b => b.jogo?.pontuacao, 0, ''],
+    ['Score geral', b => b.score_geral, 0, ''],
+  ];
+  const razao = (x, y) => x == null || y == null || !y ? '—' : num(100 * x / y, 0, ' %');
+
   app.innerHTML = `
     <a class="voltar" href="#/paciente/${s.patient_id}">← Paciente</a>
     <h1>Sessão de ${dataHora(s.inicio)}</h1>
-    <p class="mudo">${esc(s.exercicio_nome || s.exercicio)} · braço ${nomeBraco(s.braco).toLowerCase()} · cadência alvo ${num(s.cadencia_alvo, 0)} rep/min
-      · amplitude alvo ${num(s.amp_min, 0)}° a ${num(s.amp_max, 0)}°${s.reps_alvo ? ` · meta de ${s.reps_alvo} repetições` : ''}</p>
+    <p class="mudo">${esc(s.exercicio_nome || s.exercicio)} · ${s.series_alvo} ${s.series_alvo === 1 ? 'série' : 'séries'} por braço
+      ${s.reps_alvo ? `× ${s.reps_alvo} repetições` : ''} · cadência alvo ${num(s.cadencia_alvo, 0)} rep/min
+      · amplitude alvo ${num(s.amp_min, 0)}° a ${num(s.amp_max, 0)}°</p>
 
-    ${!s.fim ? '<p class="cartao">Sessão em andamento. A análise aparece quando o jogo for encerrado.</p>' : a ? `
+    ${!s.fim ? '<p class="cartao">Sessão em andamento. A análise aparece quando o jogo for encerrado.</p>' : `
     <section class="cartao heroi">
       <div class="score">
-        <h2>Score geral</h2>
-        <div class="valor">${num(a.score_geral, 0)}<small> / 100</small></div>
-        <div class="medidor"><i style="width:${a.score_geral}%"></i></div>
-        ${a.notas.simetria == null ? '<p class="mudo pequeno">Sem sessão do braço saudável: pesos redistribuídos entre as outras notas.</p>' : ''}
+        <h2>Score geral · braço afetado</h2>
+        <div class="valor">${num(af.score_geral, 0)}<small> / 100</small></div>
+        <div class="medidor"><i style="width:${af.score_geral ?? 0}%"></i></div>
+        <p class="mudo pequeno">Braço saudável: <b>${num(sa.score_geral, 0)}</b> / 100</p>
       </div>
       <div class="tiles">${NOTAS.map(n => {
-        const v = a.notas[n.k];
+        const v = af.notas?.[n.k];
         return `<div class="tile"><div class="rotulo">${n.nome} · peso ${n.peso} %</div>
           <div class="valor">${num(v, 0)}</div><div class="metodo">${n.metodo}</div>
           <div class="medidor"><i style="width:${v ?? 0}%;background:var(${n.cor})"></i></div></div>`;
       }).join('')}</div>
-    </section>` : '<p class="cartao mudo">Não há leituras brutas do haltere para esta sessão (por exemplo, sessão feita em modo simulado). Abaixo, apenas as métricas do jogo.</p>'}
+    </section>
+    ${a && !af.metricas ? '<p class="cartao mudo">Não há leituras brutas suficientes do haltere nesta sessão. Abaixo, apenas as métricas do jogo.</p>' : ''}
 
     <section class="cartao">
-      <h2>Desempenho no jogo</h2>
-      <div class="tiles">
-        ${tile('Repetições', s.total_reps ?? '—', s.reps_alvo ? `meta: ${s.reps_alvo}` : '')}
-        ${tile('Repetições no ritmo', s.aderencia_cadencia == null ? '—' : num(s.aderencia_cadencia * 100, 0, ' %'), 'período a ±20 % do alvo')}
-        ${tile('Obstáculos superados', esc(s.obstaculos ?? '—'))}
-        ${tile('Pontuação', s.pontuacao ?? '—')}
-        ${tile('Duração', s.duracao_s == null ? '—' : num(s.duracao_s / 60, 1, ' min'))}
+      <h2>Comparação entre os braços</h2>
+      <div class="tiles" style="margin-bottom:16px">
+        ${tile('Amplitude do afetado', num(sim?.excursao_pct, 0, ' % do saudável'), 'excursão média da trajetória')}
+        ${tile('Diferença entre as trajetórias', num(sim?.rmse, 1, '°'), 'RMSE afetado vs. saudável (5.9)')}
+        ${tile('Atraso do ápice', sim?.atraso_apice_pct == null ? '—' : num(sim.atraso_apice_pct, 0, ' % do ciclo'), 'positivo = afetado chega depois')}
+        ${tile('Score: afetado vs. saudável', razao(af.score_geral, sa.score_geral), 'score do afetado em % do saudável')}
       </div>
+      <div class="graficos">
+        <div><h3>Trajetória média por repetição</h3><div class="caixa-grafico alto"><canvas id="gTrajBracos"></canvas></div></div>
+        <div><h3>Notas por braço (0 a 100)</h3><div class="caixa-grafico alto"><canvas id="gNotasBracos"></canvas></div></div>
+        <div><h3>Amplitude média por série (°)</h3><div class="caixa-grafico"><canvas id="gAmpSeries"></canvas></div></div>
+        <div><h3>Score de movimento por série</h3><div class="caixa-grafico"><canvas id="gScoreSeries"></canvas></div></div>
+      </div>
+      <h3 style="margin-top:18px">Métricas lado a lado</h3>
+      <table>
+        <tr><th>Métrica</th><th class="num">Saudável</th><th class="num">Afetado</th><th class="num">Afetado em % do saudável</th></tr>
+        ${LINHAS.map(([rot, f, casas, un]) => `<tr><td>${rot}</td><td class="num">${num(f(sa), casas, un)}</td>
+          <td class="num">${num(f(af), casas, un)}</td><td class="num">${razao(f(af), f(sa))}</td></tr>`).join('')}
+      </table>
+    </section>`}
+
+    <section class="cartao">
+      <h2>Séries</h2>
+      ${s.series.length ? `<table>
+        <tr><th>Série</th><th>Braço</th><th class="num">Reps</th><th class="num">No ritmo</th><th class="num">Amplitude</th>
+            <th class="num">Obstáculos</th><th class="num">Pontos</th><th class="num">Score</th><th></th></tr>
+        ${s.series.map(x => `<tr><td>${x.n}</td><td><span class="bolinha" style="background:var(${x.braco === 'afetado' ? '--s2' : '--s1'})"></span>${nomeBraco(x.braco)}</td>
+          <td class="num">${x.total_reps ?? '—'}</td><td class="num">${num(pct(x.aderencia_cadencia), 0, ' %')}</td>
+          <td class="num">${num(x.amp_media, 1, '°')}</td><td class="num">${esc(x.obstaculos ?? '—')}</td>
+          <td class="num">${x.pontuacao ?? '—'}</td><td class="num"><b>${num(x.score_geral, 0)}</b></td>
+          <td class="num"><a href="#" data-serie="${x.id}">Ver sinais</a></td></tr>`).join('')}
+      </table>` : '<p class="mudo">Nenhuma série registrada.</p>'}
     </section>
 
-    ${a ? `
-    <section class="cartao">
-      <h2>Movimento e coordenação</h2>
-      <div class="tiles">
-        ${tile('Amplitude média', num(s.amp_media, 1, '°'), 'θ máx − θ mín por repetição')}
-        ${tile('Velocidade angular de pico', num(s.vel_media, 0, ' °/s'), 'diferenças finitas de θ')}
-        ${tile('Velocidade linear de pico', num(m.vel_linear_pico, 2, ' m/s'), 'trapézios da aceleração (5.5)')}
-        ${tile('Erro de trajetória', num(m.rmse_trajetoria, 1, '°'), 'RMSE vs. ideal, tempo normalizado (5.9)')}
-        ${tile('Índice de suavidade', num(m.i_suavidade, 1), 'trapézios de |jerk| (5.6)')}
-        ${tile('Jerk médio', num(m.jerk_medio, 2, ' m/s³'), 'índice de suavidade ÷ duração')}
-        ${tile('Intensidade do tremor', num(m.rms_tremor, 3, ' m/s²'), 'RMS do resíduo da média móvel (5.7)')}
-      </div>
-    </section>
-    <section class="cartao">
-      <h2>Compensação postural e simetria</h2>
-      <div class="tiles">
-        ${tile('Posição lateral média μx', num(m.mu_x * 100, 2, ' cm'), 'eixo X, integração dupla (5.8)')}
-        ${tile('Desvio padrão Sx', num(m.s_x * 100, 2, ' cm'), 'quanto maior, mais compensação')}
-        ${tile('Variância S²x', num(m.var_x * 1e4, 2, ' cm²'), '')}
-        ${tile('Diferença entre braços', num(m.rmse_simetria, 1, '°'), m.rmse_simetria == null ? 'faça uma sessão com o braço saudável' : 'RMSE afetado vs. saudável (5.9)')}
-        ${tile('Atraso do ápice', m.atraso_apice_pct == null ? '—' : num(m.atraso_apice_pct, 0, ' % do ciclo'), 'positivo = afetado chega depois')}
-      </div>
-    </section>
-
-    <div class="graficos">
-      <section class="cartao"><h3>Ângulo do haltere ao longo da sessão</h3><div class="caixa-grafico alto"><canvas id="gTheta"></canvas></div></section>
-      <section class="cartao"><h3>Trajetória média por repetição (tempo normalizado)</h3><div class="caixa-grafico alto"><canvas id="gTraj"></canvas></div></section>
-      <section class="cartao"><h3>Aceleração linear: movimento total e movimento lento</h3><div class="caixa-grafico"><canvas id="gAcel"></canvas></div></section>
-      <section class="cartao"><h3>Tremor isolado (resíduo)</h3><div class="caixa-grafico"><canvas id="gTremor"></canvas></div></section>
-      <section class="cartao"><h3>Jerk (m/s³)</h3><div class="caixa-grafico"><canvas id="gJerk"></canvas></div></section>
-      <section class="cartao"><h3>Deslocamento lateral — eixo X (cm)</h3><div class="caixa-grafico"><canvas id="gPx"></canvas></div></section>
-    </div>` : ''}
-
-    ${s.reps.length ? `
-    <div class="graficos">
-      <section class="cartao"><h3>Amplitude por repetição (°)</h3><div class="caixa-grafico"><canvas id="gAmp"></canvas></div></section>
-      <section class="cartao"><h3>Duração de cada repetição vs. alvo (s)</h3><div class="caixa-grafico"><canvas id="gDur"></canvas></div></section>
-    </div>
-    <section class="cartao">
-      <details><summary>Tabela de repetições</summary>
-        <table><tr><th class="num">#</th><th class="num">Amplitude</th><th class="num">Vel. de pico</th><th class="num">Duração</th><th class="num">Cadência alvo</th><th>No ritmo</th></tr>
-        ${s.reps.map(r => `<tr><td class="num">${r.n}</td><td class="num">${num(r.amplitude, 1, '°')}</td><td class="num">${num(r.vel_pico, 0, ' °/s')}</td>
-          <td class="num">${num(r.duracao_s, 2, ' s')}</td><td class="num">${num(r.cadencia, 0, '/min')}</td>
-          <td>${r.no_ritmo == null ? '—' : r.no_ritmo ? 'sim' : 'não'}</td></tr>`).join('')}</table>
-      </details>
+    ${s.series.length ? `<section class="cartao" id="secaoSinais">
+      <h2>Sinais de uma série</h2>
+      <div class="filtros">Série <select id="selSerie">${s.series.map(x => `<option value="${x.id}">Série ${x.n} · ${nomeBraco(x.braco)}</option>`).join('')}</select></div>
+      <div id="sinais"></div>
     </section>` : ''}`;
 
   if (a) {
-    const t = a.serie.t, tau = a.curva_media.map((_, i) => i);
-    grafico('gTheta', { type: 'line', data: { datasets: [
-        serie('Bruto', pontosXY(t, a.serie.theta), '--neutro', { borderWidth: 1.5 }),
-        serie('Suavizado (média móvel, K = 10)', pontosXY(t, a.serie.theta_suave), '--s1'),
-      ] }, options: opcoes({ x: 'tempo (s)', y: 'θ (°)', un: '°' }) });
-    grafico('gTraj', { type: 'line', data: { datasets: [
-        serie('Paciente (média das repetições)', pontosXY(tau, a.curva_media), '--s1', { borderWidth: 3 }),
-        serie('Trajetória ideal', pontosXY(tau, a.curva_referencia), '--neutro', { borderDash: [6, 5] }),
-        ...(a.curva_saudavel ? [serie('Braço saudável', pontosXY(tau, a.curva_saudavel), '--s3')] : []),
-      ] }, options: opcoes({ x: 'progresso da repetição τ (%)', y: 'θ (°)', un: '°' }) });
-    grafico('gAcel', { type: 'line', data: { datasets: [
-        serie('Aceleração linear', pontosXY(t, a.serie.a_lin), '--neutro', { borderWidth: 1.5 }),
-        serie('Movimento lento (K = 10)', pontosXY(t, a.serie.a_lenta), '--s1'),
-      ] }, options: opcoes({ x: 'tempo (s)', y: 'm/s²', un: ' m/s²' }) });
-    grafico('gTremor', { type: 'line', data: { datasets: [serie('Tremor', pontosXY(t, a.serie.tremor), '--s2', { borderWidth: 1.5 })] },
+    const tau = (af.curva_media || sa.curva_media || []).map((_, i) => i);
+    grafico('gTrajBracos', { type: 'line', data: { datasets: [
+        ...BRACOS.filter(b => br(b.k).curva_media).map(b => serie(b.nome, pontosXY(tau, br(b.k).curva_media), b.cor, { borderWidth: 3 })),
+        ...(af.curva_ideal ? [serie('Ideal (amplitude do afetado)', pontosXY(tau, af.curva_ideal), '--neutro', { borderDash: [6, 5] })] : []),
+      ] }, options: opcoes({ x: 'progresso da repetição τ (%)', y: 'excursão a partir da posição baixa (°)', un: '°' }) });
+    const cats = ['Trajetória', 'Estabilidade', 'Suavidade', 'Score geral'];
+    const valores = b => [b.notas?.trajetoria, b.notas?.estabilidade, b.notas?.suavidade, b.score_geral].map(v => v ?? null);
+    grafico('gNotasBracos', { type: 'bar', data: { labels: cats,
+        datasets: BRACOS.map(b => serie(b.nome, valores(br(b.k)), b.cor, { borderRadius: 4, maxBarThickness: 34 })) },
+      options: opcoes({ xTipo: 'category', yMin: 0, yMax: 100 }) });
+  }
+  const ns = [...new Set(s.series.map(x => x.n))];
+  const porSerie = f => BRACOS.map(b => serie(b.nome, ns.map(n => f(s.series.find(x => x.n === n && x.braco === b.k)) ?? null), b.cor,
+    { pointRadius: 4, spanGaps: true, pointBorderColor: cor('--cartao'), pointBorderWidth: 2 }));
+  grafico('gAmpSeries', { type: 'line', data: { labels: ns.map(n => `Série ${n}`), datasets: porSerie(x => x?.amp_media) },
+    options: opcoes({ xTipo: 'category', un: '°' }) });
+  grafico('gScoreSeries', { type: 'line', data: { labels: ns.map(n => `Série ${n}`), datasets: porSerie(x => x?.score_geral) },
+    options: opcoes({ xTipo: 'category', yMin: 0, yMax: 100 }) });
+
+  // ---- Sinais de uma série (carregados sob demanda) ----
+  const sel = $('#selSerie');
+  if (!sel) return;
+  sel.onchange = () => desenharSinais(+sel.value);
+  document.querySelectorAll('[data-serie]').forEach(lk => lk.onclick = e => {
+    e.preventDefault(); sel.value = lk.dataset.serie; desenharSinais(+sel.value);
+    $('#secaoSinais').scrollIntoView({ behavior: 'smooth' });
+  });
+  desenharSinais(+sel.value);
+}
+
+let graficosSinais = [];
+async function desenharSinais(serieId) {
+  graficosSinais.forEach(g => g.destroy()); graficosSinais = [];
+  const x = await api(`/api/series/${serieId}`), a = x.analise, m = a?.metricas || {};
+  const tile = (rotulo, valor, metodo = '') =>
+    `<div class="tile"><div class="rotulo">${rotulo}</div><div class="valor">${valor}</div><div class="metodo">${metodo}</div></div>`;
+  $('#sinais').innerHTML = `
+    ${a ? `<div class="tiles" style="margin-bottom:16px">
+      ${tile('Score da série', num(a.score_geral, 0), 'sem a nota de simetria')}
+      ${tile('Erro de trajetória', num(m.rmse_trajetoria, 1, '°'), 'RMSE vs. ideal (5.9)')}
+      ${tile('Jerk médio', num(m.jerk_medio, 2, ' m/s³'), 'suavidade (5.6)')}
+      ${tile('Tremor', num(m.rms_tremor, 3, ' m/s²'), 'RMS do resíduo (5.7)')}
+      ${tile('Compensação lateral Sx', num(pct(m.s_x), 2, ' cm'), 'eixo X (5.8)')}
+    </div>
+    <div class="graficos">
+      <div><h3>Ângulo do haltere</h3><div class="caixa-grafico"><canvas id="gTheta"></canvas></div></div>
+      <div><h3>Trajetória média vs. ideal</h3><div class="caixa-grafico"><canvas id="gTraj"></canvas></div></div>
+      <div><h3>Aceleração linear: total e movimento lento</h3><div class="caixa-grafico"><canvas id="gAcel"></canvas></div></div>
+      <div><h3>Tremor isolado (resíduo)</h3><div class="caixa-grafico"><canvas id="gTremor"></canvas></div></div>
+      <div><h3>Jerk (m/s³)</h3><div class="caixa-grafico"><canvas id="gJerk"></canvas></div></div>
+      <div><h3>Deslocamento lateral — eixo X (cm)</h3><div class="caixa-grafico"><canvas id="gPx"></canvas></div></div>
+    </div>` : '<p class="mudo">Sem leituras brutas do haltere para esta série.</p>'}
+    ${x.reps.length ? `<div class="graficos" style="margin-top:16px">
+      <div><h3>Amplitude por repetição (°)</h3><div class="caixa-grafico"><canvas id="gAmp"></canvas></div></div>
+      <div><h3>Duração de cada repetição vs. alvo (s)</h3><div class="caixa-grafico"><canvas id="gDur"></canvas></div></div>
+    </div>` : ''}`;
+  const g = (id, cfg) => grafico(id, cfg, graficosSinais);
+  if (a) {
+    const sn = a.sinais, t = sn.t, tau = a.curva_media.map((_, i) => i), corB = x.braco === 'afetado' ? '--s2' : '--s1';
+    g('gTheta', { type: 'line', data: { datasets: [
+        serie('Bruto', pontosXY(t, sn.theta), '--neutro', { borderWidth: 1.5 }),
+        serie('Suavizado (K = 10)', pontosXY(t, sn.theta_suave), corB)] },
+      options: opcoes({ x: 'tempo (s)', y: 'θ (°)', un: '°' }) });
+    g('gTraj', { type: 'line', data: { datasets: [
+        serie('Média das repetições', pontosXY(tau, a.curva_media), corB, { borderWidth: 3 }),
+        serie('Ideal', pontosXY(tau, a.curva_ideal), '--neutro', { borderDash: [6, 5] })] },
+      options: opcoes({ x: 'progresso τ (%)', y: 'excursão (°)', un: '°' }) });
+    g('gAcel', { type: 'line', data: { datasets: [
+        serie('Aceleração linear', pontosXY(t, sn.a_lin), '--neutro', { borderWidth: 1.5 }),
+        serie('Movimento lento (K = 10)', pontosXY(t, sn.a_lenta), corB)] },
+      options: opcoes({ x: 'tempo (s)', y: 'm/s²', un: ' m/s²' }) });
+    g('gTremor', { type: 'line', data: { datasets: [serie('Tremor', pontosXY(t, sn.tremor), corB, { borderWidth: 1.5 })] },
       options: opcoes({ x: 'tempo (s)', y: 'm/s²', legenda: false, un: ' m/s²' }) });
-    grafico('gJerk', { type: 'line', data: { datasets: [serie('Jerk', pontosXY(t, a.serie.jerk), '--s5', { borderWidth: 1.5 })] },
+    g('gJerk', { type: 'line', data: { datasets: [serie('Jerk', pontosXY(t, sn.jerk), corB, { borderWidth: 1.5 })] },
       options: opcoes({ x: 'tempo (s)', y: 'm/s³', legenda: false, un: ' m/s³' }) });
-    grafico('gPx', { type: 'line', data: { datasets: [serie('Posição lateral', pontosXY(t, a.serie.px, 100), '--s4')] },
+    g('gPx', { type: 'line', data: { datasets: [serie('Posição lateral', pontosXY(t, sn.px, 100), corB)] },
       options: opcoes({ x: 'tempo (s)', y: 'cm', legenda: false, un: ' cm' }) });
   }
-  if (s.reps.length) {
-    const n = s.reps.map(r => r.n);
-    const barras = { borderRadius: 4, maxBarThickness: 28 };
-    grafico('gAmp', { type: 'bar', data: { labels: n, datasets: [serie('Amplitude', s.reps.map(r => r.amplitude), '--s1', barras)] },
+  if (x.reps.length) {
+    const n = x.reps.map(r => r.n), corB = x.braco === 'afetado' ? '--s2' : '--s1';
+    g('gAmp', { type: 'bar', data: { labels: n, datasets: [serie('Amplitude', x.reps.map(r => r.amplitude), corB, { borderRadius: 4, maxBarThickness: 28 })] },
       options: opcoes({ xTipo: 'category', x: 'repetição', legenda: false, un: '°' }) });
-    grafico('gDur', { type: 'bar', data: { labels: n, datasets: [
-        serie('Duração', s.reps.map(r => r.duracao_s), '--s1', barras),
-        serie('Alvo (60 ÷ cadência)', s.reps.map(r => 60 / r.cadencia), '--neutro', { type: 'line', borderDash: [6, 5], pointRadius: 0 }),
-      ] }, options: opcoes({ xTipo: 'category', x: 'repetição', un: ' s' }) });
+    g('gDur', { type: 'bar', data: { labels: n, datasets: [
+        serie('Duração', x.reps.map(r => r.duracao_s), corB, { borderRadius: 4, maxBarThickness: 28 }),
+        serie('Alvo (60 ÷ cadência)', x.reps.map(r => 60 / r.cadencia), '--neutro', { type: 'line', borderDash: [6, 5], pointRadius: 0 })] },
+      options: opcoes({ xTipo: 'category', x: 'repetição', un: ' s' }) });
   }
 }
 
 // ===================== NAVEGAÇÃO =====================
 async function rota() {
-  graficos.forEach(g => g.destroy()); graficos = [];
+  [...graficos, ...graficosSinais].forEach(g => g.destroy()); graficos = []; graficosSinais = [];
   const [, tela, id] = location.hash.split('/');
   try {
     if (tela === 'login') return telaLogin();

@@ -28,12 +28,14 @@ O sistema tem três partes integradas:
 ```
 
 ### Fluxo de uma sessão
-1. O profissional entra na **plataforma**, escolhe o paciente e configura a sessão: **exercício**, braço, cadência, amplitude, número de repetições e duração.
-2. O **jogo** abre já configurado. O paciente movimenta o haltere e o pássaro sobe e desce acompanhando o ângulo do braço.
-3. Os canos chegam **no ritmo da cadência alvo**, alternando abertura no alto (levantar) e embaixo (abaixar). O profissional pode **ajustar a cadência ao vivo** pelo painel lateral.
-4. Cada repetição é detectada, comparada com o ritmo alvo e enviada ao backend. O paciente recebe feedback ("No ritmo ✓", "Mais devagar", "Mais rápido") e pontos.
-5. Ao final, o **módulo de análise** aplica os métodos numéricos às leituras brutas da sessão e guarda as métricas no histórico do paciente.
-6. O profissional vê a análise da sessão e a **evolução** do paciente ao longo do tratamento, sempre comparando sessões do **mesmo exercício**.
+1. O profissional entra na **plataforma**, escolhe o paciente e configura a sessão: **exercício**, **número de séries**, repetições por série, qual braço começa, cadência, amplitude e duração máxima de cada série.
+2. O **jogo** abre já configurado. **Cada série é feita com os dois braços**: por exemplo, com 3 séries começando pelo saudável, a sequência é Série 1 saudável → Série 1 afetado → Série 2 saudável → … (6 etapas). Entre as etapas aparece o resultado da série e o aviso para trocar o haltere de mão.
+3. O paciente movimenta o haltere e o pássaro sobe e desce acompanhando o ângulo do braço.
+4. Os canos chegam **no ritmo da cadência alvo**, alternando abertura no alto (levantar) e embaixo (abaixar). O profissional pode **ajustar a cadência ao vivo** pelo painel lateral.
+5. Cada repetição é detectada, comparada com o ritmo alvo e enviada ao backend. O paciente recebe feedback ("No ritmo ✓", "Mais devagar", "Mais rápido") e pontos.
+6. No fim, a **pontuação total** aparece em destaque, com estrelas e um cartão para cada braço (pontos, repetições, ritmo e score de movimento).
+7. O **módulo de análise** aplica os métodos numéricos às leituras de cada série e de cada braço e **compara os dois braços da mesma sessão** (simetria).
+8. O profissional vê a análise da sessão e a **evolução** do paciente ao longo do tratamento, sempre comparando sessões do **mesmo exercício**.
 
 ---
 
@@ -91,7 +93,7 @@ HALTER_USUARIO=seunome HALTER_SENHA=suasenha HALTER_SEGREDO=uma-frase-longa pyth
 ```
 
 ### Testar sem o haltere
-Abra o jogo e clique em **Modo simulado**. Um "paciente virtual" segue a trilha dos canos. Isso serve para testar o jogo e a plataforma. Sessões simuladas não geram leituras brutas, por isso mostram apenas as métricas do jogo, sem a análise completa.
+Abra o jogo e clique em **Modo simulado**. Um "paciente virtual" segue a trilha dos canos e gera o mesmo pacote do ESP32 (ângulo e aceleração), que é enviado ao backend. Assim, **a análise completa e a comparação entre braços também funcionam no modo simulado**. O braço afetado é simulado com menos amplitude, atraso, mais tremor e mais compensação lateral, para a comparação ficar visível.
 
 O jogo também pode ser aberto sozinho em **http://localhost:5000/game/**. Nesse caso, nada é salvo no histórico.
 
@@ -102,8 +104,15 @@ O jogo também pode ser aberto sozinho em **http://localhost:5000/game/**. Nesse
 | Tela | O que tem |
 |---|---|
 | **Pacientes** | Lista de pacientes e cadastro (nome, nascimento, observações clínicas) |
-| **Paciente** | Editar ou excluir o paciente · nova sessão · evolução do score e das notas · 6 gráficos de métricas por sessão · histórico (filtrados por exercício e braço) |
-| **Sessão** | Score geral e notas · desempenho no jogo · métricas de movimento, coordenação, compensação e simetria · gráficos do movimento · tabela de repetições |
+| **Paciente** | Editar ou excluir o paciente · nova sessão · evolução do score dos dois braços e da simetria · 6 gráficos de métricas com uma linha por braço · histórico (tudo filtrado por exercício) |
+| **Sessão** | Score geral e notas do braço afetado · **comparação entre os braços** · tabela de séries · sinais de cada série (ângulo, aceleração, tremor, jerk, deslocamento lateral, repetições) |
+
+### Comparação entre os braços (página da sessão)
+- **Indicadores:** amplitude do afetado em % do saudável, diferença entre as trajetórias (RMSE), atraso do ápice e score do afetado em % do saudável.
+- **Trajetória média por repetição:** as curvas dos dois braços sobrepostas, com a trajetória ideal.
+- **Notas por braço:** barras lado a lado para trajetória, estabilidade, suavidade e score geral.
+- **Amplitude e score por série:** uma linha por braço, para ver fadiga ou melhora ao longo da sessão.
+- **Métricas lado a lado:** todas as métricas do memorial para os dois braços, com o afetado em % do saudável.
 
 ### Exercícios e comparação entre sessões
 Cada sessão pertence a uma **categoria de exercício**. A evolução, os gráficos e o histórico do paciente mostram **um exercício por vez**: o histórico de elevação lateral, por exemplo, só compara sessões de elevação lateral. Use o filtro **Exercício** acima dos gráficos para trocar.
@@ -130,12 +139,13 @@ Ao escolher um exercício, o formulário é preenchido com a cadência, a amplit
 ### Editar e excluir pacientes
 Na página do paciente, use **Editar** para corrigir nome, nascimento e observações. **Excluir paciente** pede confirmação e apaga também todas as sessões, repetições e leituras brutas do haltere. A exclusão não pode ser desfeita.
 
-**Dica de simetria:** faça pelo menos uma sessão com o **braço saudável**. Ela vira a referência para comparar o braço afetado **no mesmo exercício**. Sem ela, a nota de simetria não é calculada e o peso dela é redistribuído entre as outras notas.
+**Simetria:** como cada sessão tem os dois braços, o braço saudável é a referência do afetado **na própria sessão**. O score geral da sessão é o do braço afetado, incluindo a nota de simetria. O braço saudável recebe um score sem simetria, e os pesos são redistribuídos entre as outras notas.
 
 ### Painel do jogo (ajustes ao vivo)
 - **Cadência alvo** (4–30 rep/min): muda o ritmo dos canos na hora.
-- **Posição baixa e alta:** peça ao paciente para ir até cada posição e toque em **"atual"**.
-- **Duração** e **Iniciar / Encerrar** a sessão.
+- **Posição baixa e alta:** peça ao paciente para ir até cada posição e toque em **"atual"**. **Cada braço guarda a sua amplitude**, porque o afetado costuma ter um alcance menor.
+- **Séries da sessão:** lista com a etapa atual e as concluídas.
+- **Iniciar série / Encerrar série.** Entre as séries, também é possível **encerrar a sessão** antes do fim.
 
 ---
 
@@ -172,7 +182,8 @@ Na página do paciente, use **Editar** para corrigir nome, nascimento e observa�
 
 **Observações de implementação:**
 - **Integração dupla.** A integração dupla da aceleração acumula erro. Por isso, em cada repetição, o viés de cada eixo é removido e a velocidade é forçada a zero no início e no fim, quando o haltere está parado.
-- **Trajetória.** A comparação de trajetórias usa o ângulo θ, que não acumula erro de integração.
+- **Trajetória.** A comparação de trajetórias usa o ângulo θ, que não acumula erro de integração. O ângulo é convertido em **excursão a partir da posição baixa**, no sentido da subida. Assim, os dois braços são comparáveis mesmo que o sensor fique invertido quando o haltere troca de mão.
+- **Primeira repetição de cada série.** Ela parte do repouso e não tem um ciclo completo antes dela, por isso fica fora da comparação de trajetórias.
 - **Limites de erro máximo.** Os limites que definem as notas ficam em `ERRO_MAX`, no início do módulo de análise. Os valores atuais são iniciais e **devem ser calibrados com voluntários saudáveis**:
 
 | Métrica | Erro máximo atual |
@@ -218,9 +229,13 @@ t_ms,theta,ax,ay,az
 | `GET` / `POST` | `/api/exercicios` | Listar e criar categorias de exercício |
 | `DELETE` | `/api/exercicios/<id>` | Excluir categoria personalizada ainda sem sessões |
 | `POST` | `/api/sessions` | Criar sessão; devolve o link do jogo configurado |
-| `POST` | `/api/sessions/<id>/reps` | O jogo envia cada repetição |
-| `POST` | `/api/sessions/<id>/end` | Encerrar a sessão e rodar a análise |
-| `GET` | `/api/sessions/<id>` | Sessão completa com análise e séries para os gráficos |
+| `POST` | `/api/sessions/<id>/series` | O jogo inicia uma série (número, braço, cadência e amplitude em uso) |
+| `POST` | `/api/series/<id>/reps` | O jogo envia cada repetição |
+| `POST` | `/api/series/<id>/end` | Encerrar a série; devolve o score dela |
+| `POST` | `/api/sessions/<id>/brutos` | Leituras geradas pelo modo simulado |
+| `POST` | `/api/sessions/<id>/end` | Encerrar a sessão; análise por braço e simetria |
+| `GET` | `/api/sessions/<id>` | Sessão com séries, repetições e análise por braço |
+| `GET` | `/api/series/<id>` | Série com os sinais para os gráficos |
 | `GET` | `/api/stream` | Leituras do haltere em tempo real (Server-Sent Events) |
 
 ---
