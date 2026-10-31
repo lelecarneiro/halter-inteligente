@@ -141,8 +141,8 @@ No jogo, clique em **Modo simulado**. Um "paciente virtual" segue a trilha dos o
 | Tela | O que tem |
 |---|---|
 | **Pacientes** | Lista de pacientes e cadastro (nome, nascimento, observações clínicas) |
-| **Paciente** | Editar ou excluir · nova sessão · evolução dos dois braços · histórico (tudo filtrado por exercício) |
-| **Sessão** | Score e notas do braço afetado · comparação entre os braços · tabela de séries · sinais de cada série |
+| **Paciente** | Editar ou excluir · nova sessão · situação atual · evolução · histórico (tudo filtrado por exercício) |
+| **Sessão** | Resumo com frases automáticas · indicadores do braço afetado · comparação entre os braços · repetição por repetição · séries e fadiga |
 
 ### Nova sessão
 
@@ -176,22 +176,46 @@ Cada sessão pertence a uma **categoria de exercício**. A evolução, os gráfi
 
 **Criar uma categoria:** na lista **Exercício**, escolha **"+ Nova categoria…"** e informe o nome e, se quiser, a descrição. Categorias criadas por você podem ser excluídas enquanto ainda não tiverem sessões.
 
-### Evolução do paciente
-- **Score geral por braço:** uma linha para o saudável (azul) e outra para o afetado (laranja).
-- **Amplitude do afetado em % do saudável:** quanto mais perto de 100 %, mais simétricos os braços.
-- **6 gráficos de métricas, com uma linha por braço:** amplitude média, repetições no ritmo, erro de trajetória, tremor, jerk médio e compensação lateral.
-- **Histórico:** tabela das sessões com os valores dos dois braços lado a lado.
+### Página do paciente
+- **Situação atual:** o score geral e os 6 indicadores da última sessão, cada um com cor (Bom / Atenção / Alerta) e uma seta mostrando como mudou desde a 1ª sessão.
+- **Evolução do braço afetado:** gráficos com uma pergunta clínica como título e uma linha "Como ler" embaixo:
+  - *O braço afetado está se aproximando do saudável?* Amplitude do afetado em % do saudável, com a faixa de simetria (90 % a 110 %) em verde.
+  - *Score geral de cada braço.*
+  - **Seis gráficos pequenos**, cada um marcado com "↑ maior é melhor" ou "↓ menor é melhor": amplitude, ritmo, desvio do movimento ideal, fluidez, tremor e desvio lateral.
+- **Histórico:** sessões do exercício com o score do afetado (com cor), a amplitude em % do saudável, o ritmo e o número de pontos de atenção.
 
-### Análise da sessão
-- **Score geral (braço afetado)** e as 4 notas: trajetória, simetria, estabilidade e suavidade.
-- **Comparação entre os braços:**
-  - **Indicadores:** amplitude do afetado em % do saudável, diferença entre as trajetórias (RMSE), atraso do ápice e score do afetado em % do saudável.
-  - **Trajetória média por repetição:** as curvas dos dois braços sobrepostas, com a trajetória ideal.
-  - **Notas por braço:** barras lado a lado.
-  - **Amplitude e score por série:** uma linha por braço, para ver fadiga ou melhora durante a sessão.
-  - **Métricas lado a lado:** todas as métricas do memorial para os dois braços, com o afetado em % do saudável.
-- **Séries:** tabela com repetições, ritmo, amplitude, obstáculos, pontos e score de cada série.
-- **Sinais de uma série:** ângulo bruto e suavizado, trajetória vs. ideal, aceleração, tremor, jerk, deslocamento lateral, amplitude e duração de cada repetição.
+### Página da sessão
+1. **Resumo:** o score geral do braço afetado (com cor e comparação com a sessão anterior) e a lista **"O que observar nesta sessão"**, com frases automáticas. Por exemplo:
+   - *"Desvio lateral 2,3× maior no braço afetado: observe compensação com ombro ou tronco."*
+   - *"A amplitude do braço afetado caiu 15 % da 1ª para a última série: possível fadiga."*
+   - *"O score do braço afetado subiu 13 pontos em relação à sessão anterior."*
+2. **Indicadores do braço afetado:** 6 cartões, cada um com a pergunta que responde, o valor em linguagem simples, a cor, um detalhe e a comparação com a sessão anterior. O **?** de cada cartão explica o que é medido.
+3. **Comparação entre os braços:**
+   - *Afetado × saudável em cada aspecto:* barras de 0 a 100 lado a lado.
+   - *Como é uma repetição média?* As curvas dos dois braços com o movimento ideal.
+4. **Repetição por repetição:**
+   - *Cada repetição alcançou a amplitude pedida?* Barras em % da meta.
+   - *O ritmo foi mantido?* Pontos com a faixa do ritmo em verde.
+5. **Séries:** tabela por série e o gráfico *Houve fadiga ao longo das séries?*
+6. **Detalhes técnicos** (recolhido): métricas do memorial de cálculo e sinais do sensor de cada série, para a equipe de engenharia.
+7. **Entenda os indicadores e as cores** (recolhido): glossário com o que cada indicador mede e as faixas de cada cor.
+
+### Como os indicadores são interpretados
+Todos os indicadores se referem ao **braço afetado**. Sempre que possível, ele é comparado com o **próprio braço saudável do paciente na mesma sessão**. Assim, a referência é o paciente, e não um valor de laboratório.
+
+| Indicador | Pergunta | ✓ Bom | ! Atenção | ✕ Alerta |
+|---|---|---|---|---|
+| Score geral | Qualidade geral do movimento (0 a 100) | ≥ 70 | 40 a 70 | < 40 |
+| Amplitude de movimento | Até onde o braço afetado consegue ir? (% do saudável) | ≥ 90 % | 70 a 90 % | < 70 % |
+| Ritmo | Acompanha a cadência pedida? (% das repetições no ritmo) | ≥ 80 % | 50 a 80 % | < 50 % |
+| Controle do movimento | Segue a trajetória esperada? (0 a 100) | ≥ 70 | 40 a 70 | < 40 |
+| Fluidez | O movimento é contínuo ou "travado"? (× o saudável) | até 1,3× | 1,3× a 2× | > 2× |
+| Tremor | Há oscilações involuntárias? (× o saudável) | até 1,3× | 1,3× a 2× | > 2× |
+| Compensação lateral | O braço desvia para o lado? (× o saudável) | até 1,3× | 1,3× a 2× | > 2× |
+
+> ⚠️ **As faixas são valores iniciais** e devem ser revisadas pela equipe clínica. Elas ficam em um único lugar no código: a constante `FAIXAS`, no início da seção "Interpretação clínica" de `frontend/index.html`.
+
+As cores de status sempre aparecem com ícone e texto (✓ Bom, ! Atenção, ✕ Alerta), para não depender só da cor.
 
 ### Editar e excluir pacientes
 Na página do paciente, use **Editar** para corrigir nome, nascimento e observações. **Excluir paciente** pede confirmação e apaga também todas as sessões, séries, repetições e leituras brutas do haltere. A exclusão não pode ser desfeita.
@@ -344,7 +368,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 | `No module named 'bleak'` ou `'flask'` | Rode `python3 -m pip install -r requirements.txt` |
 | Jogo mostra "procurando haltere…" | Confira se o ESP32 está ligado com o LED verde aceso e se o Terminal tem permissão de Bluetooth. Só um computador pode estar conectado ao haltere por vez |
 | Jogo mostra "Sinal do haltere perdido" | O jogo pausa sozinho e retoma quando os dados voltam. Aproxime o haltere do computador |
-| As repetições não são contadas | Ajuste a posição baixa e a alta do braço da vez com o botão **"atual"**. A repetição só conta se passar de 70 % da amplitude e voltar abaixo de 30 % |
+| As repetições não são contadas (comum no braço afetado) | Ajuste a posição baixa e a alta **do braço da vez** com o botão **"atual"**. A repetição só conta se passar de 70 % da amplitude configurada e voltar abaixo de 30 %. Se o braço afetado não alcança a posição alta do saudável, configure uma posição alta menor para ele |
 | "Não foi possível registrar a série" | A sessão já foi encerrada. Crie uma nova sessão na plataforma |
 | Análise sem métricas de tremor, jerk etc. | Não houve leituras do haltere durante a série. Confira a conexão, ou use o modo simulado para testar |
 | Erro de banco depois de atualizar o projeto | O banco é atualizado automaticamente ao iniciar o backend. Se o erro continuar, apague `data/halter.db` (o histórico será perdido) |
@@ -358,4 +382,5 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 - O servidor aceita conexões apenas do próprio computador (`localhost`).
 - O resíduo da média móvel (tremor) também captura um pouco do movimento voluntário, e o filtro de 12 Hz citado no memorial não foi implementado.
 - O índice de suavidade (integral de |J| no tempo) tem unidade m/s².
-- Os limites de erro máximo das notas (`ERRO_MAX`) ainda precisam ser calibrados com voluntários saudáveis.
+- Os limites de erro máximo das notas (`ERRO_MAX`, no backend) e as faixas de interpretação das cores (`FAIXAS`, na plataforma) são valores iniciais: precisam ser calibrados com voluntários saudáveis e revisados pela equipe clínica.
+- As frases automáticas descrevem o que os dados mostram e sugerem pontos a observar; elas não substituem a avaliação do fisioterapeuta.

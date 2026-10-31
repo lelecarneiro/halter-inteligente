@@ -194,6 +194,9 @@ def inicializar_banco():
                 for s in consulta('SELECT id FROM series WHERE session_id = ?', sid):
                     salvar_analise_serie(s['id'])
                 salvar_analise_sessao(sid)
+        for s in consulta('SELECT id, analise FROM sessions WHERE fim IS NOT NULL'):   # resumos de versões antigas
+            if json.loads(s['analise'] or '{}').get('versao') != VERSAO_ANALISE:
+                salvar_analise_sessao(s['id'])
 
 
 def db():
@@ -256,6 +259,7 @@ ERRO_MAX = {'trajetoria': 15.0,     # RMSE da trajetória vs. ideal (°)
             'estabilidade': 0.05,   # desvio padrão da posição lateral Sx (m)
             'suavidade': 40.0}      # jerk médio = I_suavidade / duração (m/s³)
 PESOS = {'trajetoria': 0.30, 'simetria': 0.30, 'estabilidade': 0.25, 'suavidade': 0.15}
+VERSAO_ANALISE = 2               # aumentar quando o resumo ganhar campos novos: as sessões antigas são recalculadas
 
 
 def trapezio(y, t):
@@ -411,15 +415,22 @@ def analisar_sessao(sid):
     """Resume cada braço (todas as suas séries juntas) e compara os dois braços da mesma sessão."""
     dados = ler_brutos(sid)
     series = consulta('SELECT * FROM series WHERE session_id = ? ORDER BY n, braco', sid)
-    resumo = {'bracos': {}, 'simetria': None, 'score_geral': None}
+    resumo = {'versao': VERSAO_ANALISE, 'bracos': {}, 'simetria': None, 'score_geral': None}
     for braco in BRACOS:
+        # tempo_relativo = duração média da repetição ÷ tempo alvo (1 = no ritmo, 1,2 = 20 % mais lento)
         jogo = consulta('SELECT COUNT(r.id) AS total_reps, ROUND(AVG(r.amplitude), 1) AS amp_media, '
-                        'ROUND(AVG(r.vel_pico), 1) AS vel_media, ROUND(AVG(r.no_ritmo), 3) AS aderencia_cadencia '
+                        'ROUND(AVG(r.vel_pico), 1) AS vel_media, ROUND(AVG(r.no_ritmo), 3) AS aderencia_cadencia, '
+                        'ROUND(AVG(r.duracao_s * r.cadencia / 60.0), 3) AS tempo_relativo '
                         'FROM reps r JOIN series s ON s.id = r.serie_id WHERE s.session_id = ? AND s.braco = ?', sid, braco)[0]
         do_braco = [s for s in series if s['braco'] == braco]
         jogo.update(series=len(do_braco), pontuacao=sum(s['pontuacao'] or 0 for s in do_braco))
         grupos = [(s, reps_da_serie(s['id'])) for s in do_braco]
         analise = analisar_grupo(dados, grupos) if dados is not None else None
+        # meta de amplitude do braço = média das amplitudes configuradas nas suas séries
+        alvo = np.mean([abs(s['amp_max'] - s['amp_min']) for s in do_braco]) if do_braco else None
+        jogo['amplitude_alvo'] = arred(alvo, 1)
+        if analise and alvo:
+            analise['metricas']['amplitude_pct'] = arred(100 * analise['metricas']['excursao'] / alvo, 1)
         resumo['bracos'][braco] = {'jogo': jogo, **(analise or {})}
 
     afetado, saudavel = resumo['bracos']['afetado'], resumo['bracos']['saudavel']
