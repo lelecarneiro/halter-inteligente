@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Halter Inteligente — Plataforma</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --fundo:#f3f3f1; --cartao:#fcfcfb; --borda:#e4e3df; --grade:#ecebe7;
+    --txt:#0b0b0b; --txt2:#52514e; --mudo:#7b7a75; --acento:#2a78d6; --erro:#c62f2f;
+    /* paleta categórica (ordem fixa) */
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --neutro:#9a9993;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --fundo:#121211; --cartao:#1a1a19; --borda:#2e2e2b; --grade:#262624;
+      --txt:#f0efec; --txt2:#c3c2b7; --mudo:#8f8e86; --acento:#3987e5; --erro:#e66767;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --neutro:#77766f;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fundo); color:var(--txt); font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:14px 24px; background:var(--cartao); border-bottom:1px solid var(--borda); }
+  header b { font-size:16px; } header span { color:var(--mudo); }
+  header button { margin-left:auto; }
+  main { max-width:1200px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { margin:4px 0 6px; font-size:26px; }
+  h2 { margin:0 0 14px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--txt2); }
+  h3 { margin:0 0 6px; font-size:14px; font-weight:600; color:var(--txt); }
+  a { color:var(--acento); text-decoration:none; } a:hover { text-decoration:underline; }
+  .cartao { background:var(--cartao); border:1px solid var(--borda); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .mudo { color:var(--mudo); } .pequeno { font-size:13px; } .erro { color:var(--erro); }
+  .voltar { display:inline-block; margin-bottom:4px; font-size:14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--txt2); margin-bottom:12px; }
+  input, select, textarea { width:100%; min-width:0; font:inherit; color:var(--txt); background:var(--fundo); border:1px solid var(--borda); border-radius:8px; padding:8px 10px; }
+  button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--borda); background:var(--cartao); color:var(--txt); cursor:pointer; }
+  button.pri { background:var(--acento); border-color:var(--acento); color:#fff; font-weight:600; }
+  .dupla { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .grade2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grade-paciente { display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
+  .graficos { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .multiplos { display:grid; grid-template-columns:repeat(3,1fr); gap:18px 20px; }
+  .caixa-grafico { position:relative; height:200px; } .caixa-grafico.alto { height:300px; }
+  .login { max-width:360px; margin:60px auto; }
+  .login button { width:100%; }
+  .lista { list-style:none; margin:0; padding:0; }
+  .lista li a { display:flex; justify-content:space-between; gap:10px; padding:12px 4px; border-bottom:1px solid var(--borda); color:var(--txt); }
+  .lista li a span { color:var(--mudo); font-size:13px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-weight:600; color:var(--txt2); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  th, td { padding:8px 6px; border-bottom:1px solid var(--borda); }
+  td.num, th.num { text-align:right; }
+  .filtros { display:flex; gap:10px; align-items:center; margin-bottom:12px; font-size:13px; color:var(--txt2); }
+  .filtros select { width:auto; padding:5px 8px; }
+  /* Métricas */
+  .heroi { display:grid; grid-template-columns:240px 1fr; gap:16px; }
+  .score { display:flex; flex-direction:column; justify-content:center; }
+  .score .valor { font-size:56px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .score .valor small { font-size:18px; font-weight:500; color:var(--mudo); }
+  .medidor { height:8px; border-radius:4px; background:var(--grade); margin-top:12px; overflow:hidden; }
+  .medidor i { display:block; height:100%; background:var(--acento); border-radius:4px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+  .tile { border:1px solid var(--borda); border-radius:10px; padding:12px; }
+  .tile .rotulo { font-size:12px; color:var(--txt2); }
+  .tile .valor { font-size:22px; font-weight:700; margin:2px 0; font-variant-numeric:tabular-nums; }
+  .tile .metodo { font-size:12px; color:var(--mudo); }
+  .tile .medidor { height:5px; margin-top:6px; }
+  details summary { cursor:pointer; color:var(--acento); font-size:14px; }
+  @media (max-width:900px) { .grade2, .grade-paciente, .graficos, .heroi { grid-template-columns:1fr; } .multiplos { grid-template-columns:1fr 1fr; } }
+  @media (max-width:560px) { .multiplos, .dupla { grid-template-columns:1fr; } main { padding:16px; } }
+</style>
+</head>
+<body>
+<header>
+  <b>Halter Inteligente</b><span>Plataforma do profissional</span>
+  <button id="sair" hidden>Sair</button>
+</header>
+<main id="app"></main>
+
+<script>
+// ===================== UTILIDADES =====================
+const $ = s => document.querySelector(s);
+const app = $('#app');
+const cor = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = (v, casas = 1, un = '') => v == null || !isFinite(v) ? '—'
+  : (+v).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) + un;
+const dataHora = iso => iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+const dataCurta = iso => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+const nomeBraco = b => b === 'saudavel' ? 'Saudável' : 'Afetado';
+
+async function api(url, opcoes = {}) {
+  const r = await fetch(url, { method: opcoes.method || 'GET', headers: { 'Content-Type': 'application/json' },
+                               body: opcoes.body && JSON.stringify(opcoes.body) });
+  if (r.status === 401) { location.hash = '#/login'; throw new Error('faça login novamente'); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || `erro ${r.status}`);
+  return r.json();
+}
+// Envia um formulário tratando erros
+const aoEnviar = (form, acao) => form.onsubmit = async e => {
+  e.preventDefault();
+  try { await acao(Object.fromEntries(new FormData(form))); } catch (erro) { alert(erro.message); }
+};
+
+// ===================== GRÁFICOS =====================
+let graficos = [];
+function grafico(id, config) {
+  const el = document.getElementById(id);
+  if (el && window.Chart) graficos.push(new Chart(el, config));   // sem internet para o CDN: só os gráficos somem
+}
+function opcoes({ x = '', y = '', xTipo = 'linear', legenda = true, yMin, yMax, un = '' } = {}) {
+  const txt2 = cor('--txt2'), grade = cor('--grade');
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: legenda, align: 'start', labels: { color: txt2, boxWidth: 14, boxHeight: 3 } },
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${num(c.parsed.y, 2, un)}` } },
+    },
+    scales: {
+      x: { type: xTipo, title: { display: !!x, text: x, color: txt2 }, ticks: { color: txt2, maxTicksLimit: 8 },
+           grid: { display: false }, border: { color: grade } },
+      y: { min: yMin, max: yMax, title: { display: !!y, text: y, color: txt2 }, ticks: { color: txt2, maxTicksLimit: 6 },
+           grid: { color: grade }, border: { display: false } },
+    },
+    elements: { point: { radius: 0, hoverRadius: 4 }, line: { borderWidth: 2, tension: 0 } },
+  };
+}
+const serie = (label, data, varCor, extra = {}) => ({ label, data, borderColor: cor(varCor), backgroundColor: cor(varCor), ...extra });
+const pontosXY = (xs, ys, escala = 1) => xs.map((x, i) => ({ x, y: ys[i] == null ? null : ys[i] * escala }));
+
+// ===================== TELAS =====================
+function telaLogin() {
+  $('#sair').hidden = true;
+  app.innerHTML = `
+    <form class="cartao login" id="fLogin">
+      <h2>Entrar</h2>
+      <label>Usuário<input name="usuario" required autocomplete="username"></label>
+      <label>Senha<input name="senha" type="password" required autocomplete="current-password"></label>
+      <p class="erro" id="msg"></p>
+      <button class="pri">Entrar</button>
+    </form>`;
+  $('#fLogin').onsubmit = async e => {
+    e.preventDefault();
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify(Object.fromEntries(new FormData(e.target))) });
+    if (r.ok) location.hash = '#/'; else $('#msg').textContent = 'Usuário ou senha incorretos.';
+  };
+}
+
+async function telaPacientes() {
+  const lista = await api('/api/patients');
+  app.innerHTML = `
+    <h1>Pacientes</h1>
+    <div class="grade2">
+      <section class="cartao">
+        <h2>Selecionar paciente</h2>
+        ${lista.length ? `<ul class="lista">${lista.map(p => `
+          <li><a href="#/paciente/${p.id}"><b>${esc(p.nome)}</b>
+          <span>${p.sessoes} ${p.sessoes === 1 ? 'sessão' : 'sessões'} · última: ${dataHora(p.ultima_sessao)}</span></a></li>`).join('')}</ul>`
+        : '<p class="mudo">Nenhum paciente cadastrado ainda.</p>'}
+      </section>
+      <form class="cartao" id="fPaciente">
+        <h2>Novo paciente</h2>
+        <label>Nome<input name="nome" required></label>
+        <label>Data de nascimento<input name="nascimento" type="date"></label>
+        <label>Observações clínicas<textarea name="observacoes" rows="3"></textarea></label>
+        <button class="pri">Cadastrar</button>
+      </form>
+    </div>`;
+  aoEnviar($('#fPaciente'), async dados => {
+    const { id } = await api('/api/patients', { method: 'POST', body: dados });
+    location.hash = `#/paciente/${id}`;
+  });
+}
+
+// Métricas acompanhadas ao longo das sessões (uma por gráfico: unidades diferentes nunca dividem eixo)
+const EVOLUCAO = [
+  { id: 'amp', nome: 'Amplitude média (°)', v: s => s.amp_media, un: '°' },
+  { id: 'ritmo', nome: 'Repetições no ritmo (%)', v: s => s.aderencia_cadencia == null ? null : s.aderencia_cadencia * 100, un: ' %' },
+  { id: 'traj', nome: 'Erro de trajetória — RMSE (°)', v: s => s.analise?.metricas.rmse_trajetoria, un: '°' },
+  { id: 'tremor', nome: 'Tremor — RMS (m/s²)', v: s => s.analise?.metricas.rms_tremor, un: ' m/s²' },
+  { id: 'jerk', nome: 'Jerk médio (m/s³)', v: s => s.analise?.metricas.jerk_medio, un: ' m/s³' },
+  { id: 'sx', nome: 'Compensação lateral — Sx (cm)', v: s => s.analise?.metricas.s_x == null ? null : s.analise.metricas.s_x * 100, un: ' cm' },
+];
+const NOTAS = [
+  { k: 'trajetoria', nome: 'Trajetória', peso: 30, cor: '--s2', metodo: 'RMSE vs. trajetória ideal' },
+  { k: 'simetria', nome: 'Simetria', peso: 30, cor: '--s3', metodo: 'RMSE vs. braço saudável' },
+  { k: 'estabilidade', nome: 'Estabilidade', peso: 25, cor: '--s4', metodo: 'Desvio padrão lateral Sx' },
+  { k: 'suavidade', nome: 'Suavidade', peso: 15, cor: '--s5', metodo: 'Jerk médio' },
+];
+
+async function telaPaciente(id) {
+  const [p, sessoes] = await Promise.all([api(`/api/patients/${id}`), api(`/api/patients/${id}/sessions`)]);
+  const ultima = sessoes.at(-1) || {};
+  app.innerHTML = `
+    <a class="voltar" href="#/">← Pacientes</a>
+    <h1>${esc(p.nome)}</h1>
+    <p class="mudo">${p.nascimento ? 'Nascimento: ' + new Date(p.nascimento + 'T00:00').toLocaleDateString('pt-BR') + ' · ' : ''}${esc(p.observacoes || '')}</p>
+
+    <div class="grade-paciente">
+      <form class="cartao" id="fSessao">
+        <h2>Nova sessão</h2>
+        <label>Braço<select name="braco">
+          <option value="afetado">Afetado</option><option value="saudavel">Saudável (referência de simetria)</option></select></label>
+        <label>Exercício<input name="exercicio" value="${esc(ultima.exercicio || 'Flexão de cotovelo')}"></label>
+        <div class="dupla">
+          <label>Cadência (rep/min)<input name="cadencia_alvo" type="number" min="4" max="30" value="${ultima.cadencia_alvo || 12}" required></label>
+          <label>Nº de repetições<input name="reps_alvo" type="number" min="1" max="200" placeholder="livre" value="${ultima.reps_alvo || ''}"></label>
+        </div>
+        <div class="dupla">
+          <label>Posição baixa (°)<input name="amp_min" type="number" value="${ultima.amp_min ?? 0}" required></label>
+          <label>Posição alta (°)<input name="amp_max" type="number" value="${ultima.amp_max ?? 60}" required></label>
+        </div>
+        <label>Duração máxima (min)<input name="duracao_min" type="number" min="1" max="30" value="${ultima.duracao_min || 3}" required></label>
+        <button class="pri">Criar sessão e abrir o jogo</button>
+        <p class="mudo pequeno">Cadência e amplitude também podem ser ajustadas no painel do jogo durante a sessão.</p>
+      </form>
+
+      <section class="cartao">
+        <h2>Evolução</h2>
+        <div class="filtros">Braço
+          <select id="fBraco"><option value="afetado">Afetado</option><option value="saudavel">Saudável</option></select>
+        </div>
+        <h3>Score geral e notas (0 a 100)</h3>
+        <div class="caixa-grafico alto"><canvas id="gNotas"></canvas></div>
+        <p class="mudo pequeno" id="semEvolucao"></p>
+      </section>
+    </div>
+
+    <section class="cartao">
+      <h2>Métricas por sessão</h2>
+      <div class="multiplos">${EVOLUCAO.map(m => `<div><h3>${m.nome}</h3><div class="caixa-grafico"><canvas id="ev_${m.id}"></canvas></div></div>`).join('')}</div>
+    </section>
+
+    <section class="cartao">
+      <h2>Histórico de sessões</h2>
+      ${sessoes.length ? `<table>
+        <tr><th>Data</th><th>Braço</th><th class="num">Cadência</th><th class="num">Reps</th><th class="num">No ritmo</th>
+            <th class="num">Amplitude</th><th class="num">Score geral</th><th></th></tr>
+        ${sessoes.slice().reverse().map(s => `<tr>
+          <td>${dataHora(s.inicio)}</td><td>${nomeBraco(s.braco)}</td><td class="num">${num(s.cadencia_alvo, 0)}/min</td>
+          <td class="num">${s.total_reps ?? '—'}</td><td class="num">${s.aderencia_cadencia == null ? '—' : num(s.aderencia_cadencia * 100, 0, ' %')}</td>
+          <td class="num">${num(s.amp_media, 1, '°')}</td><td class="num"><b>${num(s.score_geral, 0)}</b></td>
+          <td class="num">${s.fim ? `<a href="#/sessao/${s.id}">Ver análise</a>` : '<span class="mudo">em andamento</span>'}</td></tr>`).join('')}
+      </table>` : '<p class="mudo">Nenhuma sessão ainda.</p>'}
+    </section>`;
+
+  aoEnviar($('#fSessao'), async dados => {
+    const { jogo } = await api('/api/sessions', { method: 'POST', body: { ...dados, patient_id: id } });
+    location.href = jogo;                          // abre o jogo já configurado
+  });
+  $('#fBraco').onchange = () => desenharEvolucao(sessoes, $('#fBraco').value);
+  desenharEvolucao(sessoes, 'afetado');
+}
+
+function desenharEvolucao(sessoes, braco) {
+  graficos.forEach(g => g.destroy()); graficos = [];
+  const feitas = sessoes.filter(s => s.fim && s.braco === braco);
+  const rotulos = feitas.map((s, i) => `${i + 1}ª · ${dataCurta(s.inicio)}`);
+  $('#semEvolucao').textContent = feitas.length ? '' : `Nenhuma sessão concluída com o braço ${nomeBraco(braco).toLowerCase()}.`;
+  const comPontos = { pointRadius: 4, pointHoverRadius: 6, spanGaps: true, pointBorderColor: cor('--cartao'), pointBorderWidth: 2 };
+  grafico('gNotas', {
+    type: 'line',
+    data: { labels: rotulos, datasets: [
+      serie('Score geral', feitas.map(s => s.score_geral), '--s1', { ...comPontos, borderWidth: 3 }),
+      ...NOTAS.map(n => serie(n.nome, feitas.map(s => s.analise?.notas[n.k] ?? null), n.cor, comPontos)),
+    ] },
+    options: opcoes({ xTipo: 'category', yMin: 0, yMax: 100 }),
+  });
+  for (const m of EVOLUCAO) {
+    grafico('ev_' + m.id, {
+      type: 'line',
+      data: { labels: rotulos, datasets: [serie(m.nome, feitas.map(m.v), '--s1', comPontos)] },
+      options: opcoes({ xTipo: 'category', legenda: false, un: m.un }),
+    });
+  }
+}
+
+async function telaSessao(id) {
+  const s = await api(`/api/sessions/${id}`);
+  const a = s.analise, m = a?.metricas || {};
+  const tile = (rotulo, valor, metodo = '') =>
+    `<div class="tile"><div class="rotulo">${rotulo}</div><div class="valor">${valor}</div><div class="metodo">${metodo}</div></div>`;
+  app.innerHTML = `
+    <a class="voltar" href="#/paciente/${s.patient_id}">← Paciente</a>
+    <h1>Sessão de ${dataHora(s.inicio)}</h1>
+    <p class="mudo">${esc(s.exercicio)} · braço ${nomeBraco(s.braco).toLowerCase()} · cadência alvo ${num(s.cadencia_alvo, 0)} rep/min
+      · amplitude alvo ${num(s.amp_min, 0)}° a ${num(s.amp_max, 0)}°${s.reps_alvo ? ` · meta de ${s.reps_alvo} repetições` : ''}</p>
+
+    ${!s.fim ? '<p class="cartao">Sessão em andamento. A análise aparece quando o jogo for encerrado.</p>' : a ? `
+    <section class="cartao heroi">
+      <div class="score">
+        <h2>Score geral</h2>
+        <div class="valor">${num(a.score_geral, 0)}<small> / 100</small></div>
+        <div class="medidor"><i style="width:${a.score_geral}%"></i></div>
+        ${a.notas.simetria == null ? '<p class="mudo pequeno">Sem sessão do braço saudável: pesos redistribuídos entre as outras notas.</p>' : ''}
+      </div>
+      <div class="tiles">${NOTAS.map(n => {
+        const v = a.notas[n.k];
+        return `<div class="tile"><div class="rotulo">${n.nome} · peso ${n.peso} %</div>
+          <div class="valor">${num(v, 0)}</div><div class="metodo">${n.metodo}</div>
+          <div class="medidor"><i style="width:${v ?? 0}%;background:var(${n.cor})"></i></div></div>`;
+      }).join('')}</div>
+    </section>` : '<p class="cartao mudo">Não há leituras brutas do haltere para esta sessão (por exemplo, sessão feita em modo simulado). Abaixo, apenas as métricas do jogo.</p>'}
+
+    <section class="cartao">
+      <h2>Desempenho no jogo</h2>
+      <div class="tiles">
+        ${tile('Repetições', s.total_reps ?? '—', s.reps_alvo ? `meta: ${s.reps_alvo}` : '')}
+        ${tile('Repetições no ritmo', s.aderencia_cadencia == null ? '—' : num(s.aderencia_cadencia * 100, 0, ' %'), 'período a ±20 % do alvo')}
+        ${tile('Obstáculos superados', esc(s.obstaculos ?? '—'))}
+        ${tile('Pontuação', s.pontuacao ?? '—')}
+        ${tile('Duração', s.duracao_s == null ? '—' : num(s.duracao_s / 60, 1, ' min'))}
+      </div>
+    </section>
+
+    ${a ? `
+    <section class="cartao">
+      <h2>Movimento e coordenação</h2>
+      <div class="tiles">
+        ${tile('Amplitude média', num(s.amp_media, 1, '°'), 'θ máx − θ mín por repetição')}
+        ${tile('Velocidade angular de pico', num(s.vel_media, 0, ' °/s'), 'diferenças finitas de θ')}
+        ${tile('Velocidade linear de pico', num(m.vel_linear_pico, 2, ' m/s'), 'trapézios da aceleração (5.5)')}
+        ${tile('Erro de trajetória', num(m.rmse_trajetoria, 1, '°'), 'RMSE vs. ideal, tempo normalizado (5.9)')}
+        ${tile('Índice de suavidade', num(m.i_suavidade, 1), 'trapézios de |jerk| (5.6)')}
+        ${tile('Jerk médio', num(m.jerk_medio, 2, ' m/s³'), 'índice de suavidade ÷ duração')}
+        ${tile('Intensidade do tremor', num(m.rms_tremor, 3, ' m/s²'), 'RMS do resíduo da média móvel (5.7)')}
+      </div>
+    </section>
+    <section class="cartao">
+      <h2>Compensação postural e simetria</h2>
+      <div class="tiles">
+        ${tile('Posição lateral média μx', num(m.mu_x * 100, 2, ' cm'), 'eixo X, integração dupla (5.8)')}
+        ${tile('Desvio padrão Sx', num(m.s_x * 100, 2, ' cm'), 'quanto maior, mais compensação')}
+        ${tile('Variância S²x', num(m.var_x * 1e4, 2, ' cm²'), '')}
+        ${tile('Diferença entre braços', num(m.rmse_simetria, 1, '°'), m.rmse_simetria == null ? 'faça uma sessão com o braço saudável' : 'RMSE afetado vs. saudável (5.9)')}
+        ${tile('Atraso do ápice', m.atraso_apice_pct == null ? '—' : num(m.atraso_apice_pct, 0, ' % do ciclo'), 'positivo = afetado chega depois')}
+      </div>
+    </section>
+
+    <div class="graficos">
+      <section class="cartao"><h3>Ângulo do haltere ao longo da sessão</h3><div class="caixa-grafico alto"><canvas id="gTheta"></canvas></div></section>
+      <section class="cartao"><h3>Trajetória média por repetição (tempo normalizado)</h3><div class="caixa-grafico alto"><canvas id="gTraj"></canvas></div></section>
+      <section class="cartao"><h3>Aceleração linear: movimento total e movimento lento</h3><div class="caixa-grafico"><canvas id="gAcel"></canvas></div></section>
+      <section class="cartao"><h3>Tremor isolado (resíduo)</h3><div class="caixa-grafico"><canvas id="gTremor"></canvas></div></section>
+      <section class="cartao"><h3>Jerk (m/s³)</h3><div class="caixa-grafico"><canvas id="gJerk"></canvas></div></section>
+      <section class="cartao"><h3>Deslocamento lateral — eixo X (cm)</h3><div class="caixa-grafico"><canvas id="gPx"></canvas></div></section>
+    </div>` : ''}
+
+    ${s.reps.length ? `
+    <div class="graficos">
+      <section class="cartao"><h3>Amplitude por repetição (°)</h3><div class="caixa-grafico"><canvas id="gAmp"></canvas></div></section>
+      <section class="cartao"><h3>Duração de cada repetição vs. alvo (s)</h3><div class="caixa-grafico"><canvas id="gDur"></canvas></div></section>
+    </div>
+    <section class="cartao">
+      <details><summary>Tabela de repetições</summary>
+        <table><tr><th class="num">#</th><th class="num">Amplitude</th><th class="num">Vel. de pico</th><th class="num">Duração</th><th class="num">Cadência alvo</th><th>No ritmo</th></tr>
+        ${s.reps.map(r => `<tr><td class="num">${r.n}</td><td class="num">${num(r.amplitude, 1, '°')}</td><td class="num">${num(r.vel_pico, 0, ' °/s')}</td>
+          <td class="num">${num(r.duracao_s, 2, ' s')}</td><td class="num">${num(r.cadencia, 0, '/min')}</td>
+          <td>${r.no_ritmo == null ? '—' : r.no_ritmo ? 'sim' : 'não'}</td></tr>`).join('')}</table>
+      </details>
+    </section>` : ''}`;
+
+  if (a) {
+    const t = a.serie.t, tau = a.curva_media.map((_, i) => i);
+    grafico('gTheta', { type: 'line', data: { datasets: [
+        serie('Bruto', pontosXY(t, a.serie.theta), '--neutro', { borderWidth: 1.5 }),
+        serie('Suavizado (média móvel, K = 10)', pontosXY(t, a.serie.theta_suave), '--s1'),
+      ] }, options: opcoes({ x: 'tempo (s)', y: 'θ (°)', un: '°' }) });
+    grafico('gTraj', { type: 'line', data: { datasets: [
+        serie('Paciente (média das repetições)', pontosXY(tau, a.curva_media), '--s1', { borderWidth: 3 }),
+        serie('Trajetória ideal', pontosXY(tau, a.curva_referencia), '--neutro', { borderDash: [6, 5] }),
+        ...(a.curva_saudavel ? [serie('Braço saudável', pontosXY(tau, a.curva_saudavel), '--s3')] : []),
+      ] }, options: opcoes({ x: 'progresso da repetição τ (%)', y: 'θ (°)', un: '°' }) });
+    grafico('gAcel', { type: 'line', data: { datasets: [
+        serie('Aceleração linear', pontosXY(t, a.serie.a_lin), '--neutro', { borderWidth: 1.5 }),
+        serie('Movimento lento (K = 10)', pontosXY(t, a.serie.a_lenta), '--s1'),
+      ] }, options: opcoes({ x: 'tempo (s)', y: 'm/s²', un: ' m/s²' }) });
+    grafico('gTremor', { type: 'line', data: { datasets: [serie('Tremor', pontosXY(t, a.serie.tremor), '--s2', { borderWidth: 1.5 })] },
+      options: opcoes({ x: 'tempo (s)', y: 'm/s²', legenda: false, un: ' m/s²' }) });
+    grafico('gJerk', { type: 'line', data: { datasets: [serie('Jerk', pontosXY(t, a.serie.jerk), '--s5', { borderWidth: 1.5 })] },
+      options: opcoes({ x: 'tempo (s)', y: 'm/s³', legenda: false, un: ' m/s³' }) });
+    grafico('gPx', { type: 'line', data: { datasets: [serie('Posição lateral', pontosXY(t, a.serie.px, 100), '--s4')] },
+      options: opcoes({ x: 'tempo (s)', y: 'cm', legenda: false, un: ' cm' }) });
+  }
+  if (s.reps.length) {
+    const n = s.reps.map(r => r.n);
+    const barras = { borderRadius: 4, maxBarThickness: 28 };
+    grafico('gAmp', { type: 'bar', data: { labels: n, datasets: [serie('Amplitude', s.reps.map(r => r.amplitude), '--s1', barras)] },
+      options: opcoes({ xTipo: 'category', x: 'repetição', legenda: false, un: '°' }) });
+    grafico('gDur', { type: 'bar', data: { labels: n, datasets: [
+        serie('Duração', s.reps.map(r => r.duracao_s), '--s1', barras),
+        serie('Alvo (60 ÷ cadência)', s.reps.map(r => 60 / r.cadencia), '--neutro', { type: 'line', borderDash: [6, 5], pointRadius: 0 }),
+      ] }, options: opcoes({ xTipo: 'category', x: 'repetição', un: ' s' }) });
+  }
+}
+
+// ===================== NAVEGAÇÃO =====================
+async function rota() {
+  graficos.forEach(g => g.destroy()); graficos = [];
+  const [, tela, id] = location.hash.split('/');
+  try {
+    if (tela === 'login') return telaLogin();
+    const { usuario } = await api('/api/me');
+    if (!usuario) return (location.hash = '#/login');
+    $('#sair').hidden = false;
+    if (tela === 'paciente') return await telaPaciente(+id);
+    if (tela === 'sessao') return await telaSessao(+id);
+    await telaPacientes();
+  } catch (erro) {
+    app.innerHTML = `<p class="cartao erro">Não foi possível carregar: ${esc(erro.message)}</p>`;
+  }
+}
+$('#sair').onclick = async () => { await fetch('/api/logout', { method: 'POST' }); location.hash = '#/login'; };
+if (window.Chart) Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+addEventListener('hashchange', rota);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', rota);   // recolore os gráficos
+rota();
+</script>
+</body>
+</html>

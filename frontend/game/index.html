@@ -109,6 +109,7 @@ const cfg = {
   min: +(url.get('min') ?? 0),              // ângulo da posição baixa (°)
   max: +(url.get('max') ?? 60),             // ângulo da posição alta (°)
   duracao: +url.get('duracao') || 3,        // minutos
+  reps: +url.get('reps') || 0,              // meta de repetições (0 = sem meta, termina pelo tempo)
   sessao: url.get('sessao'),                // id da sessão no backend (opcional)
 };
 const periodo = () => 60 / cfg.cadencia;    // segundos por repetição
@@ -132,8 +133,8 @@ function receber(linha) {
 }
 
 function processar(t, th) {
-  // Filtro: média móvel de 5 amostras
-  janela.push(th); if (janela.length > 5) janela.shift();
+  // Filtro: média móvel das últimas K = 10 amostras (memorial 5.7) — reduz o efeito do tremor no jogo
+  janela.push(th); if (janela.length > 10) janela.shift();
   const novo = janela.reduce((a, b) => a + b) / janela.length;
   // Velocidade angular por diferenças finitas: (θᵢ − θᵢ₋₁) / Δt
   if (tAnt !== null && t > tAnt) vel = (novo - theta) / (t - tAnt);
@@ -171,6 +172,7 @@ function registrarRepeticao(t) {
   else if (noRitmo) mostrarFeedback('No ritmo ✓', 'var(--ok)');
   else mostrarFeedback(dur < T ? 'Mais devagar' : 'Mais rápido', 'var(--aviso)');
   tUltimaRep = t; repMin = repMax = theta; velPico = 0;
+  if (cfg.reps && reps.length >= cfg.reps) encerrar();     // atingiu a meta de repetições
 }
 
 // --- Haltere real: o backend lê o Bluetooth e repassa cada leitura em tempo real (SSE) ---
@@ -207,16 +209,20 @@ function simular() {
 function pararSimulacao() { clearInterval(simTimer); simTimer = null; }
 
 // ===================== BACKEND (opcional) =====================
+let pendentes = [];                                          // envios de repetições ainda em trânsito
 function enviar(caminho, dados) {
-  if (!cfg.sessao) return;                                   // sem sessão = jogo funciona sozinho
-  fetch(`/api/sessions/${cfg.sessao}${caminho}`, {
+  if (!cfg.sessao) return Promise.resolve();                 // sem sessão = jogo funciona sozinho
+  const envio = fetch(`/api/sessions/${cfg.sessao}${caminho}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados),
   }).catch(() => {});
+  pendentes.push(envio);
+  return envio;
 }
 
 // ===================== SESSÃO =====================
 function iniciar() {
   if (!fonte) return alert('Conecte o haltere ou use o modo simulado.');
+  if (estado === 'fim' && cfg.sessao) return alert('Esta sessão já foi encerrada. Crie uma nova sessão na plataforma.');
   estado = 'jogando';
   canos = []; proxCano = 1; proxTipo = 'alto'; pontos = passados = totalCanos = 0; tJogo = 0;
   reps = []; tUltimaRep = null; repMin = repMax = theta; velPico = 0;
@@ -236,7 +242,7 @@ function encerrar() {
     vel_media: +media(reps.map(r => r.vel_pico)).toFixed(1),
     obstaculos: `${passados}/${totalCanos}`, pontuacao: pontos,
   };
-  enviar('/end', ind);
+  Promise.allSettled(pendentes).then(() => enviar('/end', ind));   // só encerra depois de salvar todas as repetições
   $('tabResumo').innerHTML = [
     ['Duração', formatarTempo(ind.duracao_s)], ['Repetições', ind.total_reps],
     ['Repetições no ritmo', Math.round(ind.aderencia_cadencia * 100) + ' %'],
@@ -246,7 +252,10 @@ function encerrar() {
   $('resumo').classList.add('on');
   $('btIniciar').disabled = false; $('btEncerrar').disabled = true;
 }
-function novaSessao() { estado = 'aguardando'; canos = []; $('resumo').classList.remove('on'); }
+function novaSessao() {
+  if (cfg.sessao) return location.href = `/#/sessao/${cfg.sessao}`;   // volta à plataforma, na análise desta sessão
+  estado = 'aguardando'; canos = []; $('resumo').classList.remove('on');
+}
 
 // ===================== JOGO =====================
 const LARG = 64;                                            // largura do cano
@@ -372,7 +381,7 @@ function mostrarFeedback(txt, cor) {
 function atualizarHud() {
   $('hTempo').textContent = formatarTempo(estado === 'jogando' ? Math.max(0, cfg.duracao * 60 - tJogo) : cfg.duracao * 60);
   $('hPontos').textContent = pontos;
-  $('hReps').textContent = reps.length;
+  $('hReps').textContent = cfg.reps ? `${reps.length}/${cfg.reps}` : reps.length;
   const av = reps.filter(r => r.no_ritmo !== null);
   $('hRitmo').textContent = av.length ? Math.round(100 * av.filter(r => r.no_ritmo).length / av.length) + ' %' : '–';
   $('thetaAtual').textContent = fonte ? theta.toFixed(1) : '–';
@@ -413,6 +422,7 @@ $('btIniciar').onclick = iniciar;
 $('btEncerrar').onclick = encerrar;
 
 definirCadencia(cfg.cadencia);
+if (cfg.sessao) document.querySelector('#resumo button').textContent = 'Ver análise na plataforma';
 if (location.protocol.startsWith('http')) conectar();       // aberto pelo backend: já escuta o haltere
 addEventListener('resize', redimensionar);
 redimensionar();
