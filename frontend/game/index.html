@@ -51,6 +51,9 @@
   label span { flex:1; }
   input[type=number] { width:64px; padding:5px; border-radius:6px; border:1px solid var(--borda); background:#0b1220; color:var(--txt); font:inherit; }
   input[type=range] { flex:1; accent-color:var(--acento); }
+  select { flex:1; min-width:0; width:100%; padding:6px; border-radius:6px; border:1px solid var(--borda); background:#0b1220; color:var(--txt); font:inherit; }
+  .amp input[type=number] { width:52px; }
+  .amp .un { color:var(--sub); font-size:13px; margin-left:-4px; }
   button { padding:8px 10px; border-radius:8px; border:1px solid #374151; background:#1f2937; color:var(--txt); font:inherit; cursor:pointer; }
   button.pri { background:var(--acento); border:0; color:#0b1220; font-weight:700; }
   button:disabled { opacity:.4; cursor:default; }
@@ -98,6 +101,15 @@
   </section>
 
   <section>
+    <h2>Controle do jogo</h2>
+    <label><select id="controle">
+      <option value="altura">Subida e descida do haltere (altura)</option>
+      <option value="angulo">Rotação do haltere (ângulo θ)</option>
+    </select></label>
+    <p class="sub" id="controleInfo"></p>
+  </section>
+
+  <section>
     <h2>Cadência alvo (profissional)</h2>
     <div id="cad"></div>
     <div class="linha">
@@ -110,10 +122,14 @@
 
   <section>
     <h2>Amplitude — <span id="amplitudeBraco"></span></h2>
-    <p>θ atual: <b id="thetaAtual">–</b>°</p>
-    <label><span>Posição baixa (°)</span><input id="min" type="number" step="1"><button data-usar="min">atual</button></label>
-    <label><span>Posição alta (°)</span><input id="max" type="number" step="1"><button data-usar="max">atual</button></label>
-    <p class="sub">Cada braço guarda a sua amplitude. Peça ao paciente para ir até cada posição e toque em “atual”.</p>
+    <p>Altura: <b id="alturaAtual">–</b> cm · θ: <b id="thetaAtual">–</b>°
+      <button id="btZerar" title="Considera a altura atual como a posição baixa">zerar</button></p>
+    <label class="amp"><span>Posição baixa</span><input id="altMin" type="number" step="1"><span class="un">cm</span>
+      <input id="min" type="number" step="1"><span class="un">°</span><button data-usar="min">atual</button></label>
+    <label class="amp"><span>Posição alta</span><input id="altMax" type="number" step="1"><span class="un">cm</span>
+      <input id="max" type="number" step="1"><span class="un">°</span><button data-usar="max">atual</button></label>
+    <p class="sub">Cada braço guarda a sua amplitude. Peça ao paciente para ir até cada posição e toque em “atual”: grava a altura e o ângulo juntos.
+      A série começa com o haltere parado na posição baixa.</p>
   </section>
 
   <section>
@@ -129,13 +145,16 @@
 <script>
 // ===================== CONFIGURAÇÃO =====================
 // A plataforma abre o jogo com parâmetros na URL, ex.:
-//   /game/?sessao=7&cadencia=12&min=0&max=60&duracao=2&reps=10&series=3&ordem=saudavel
+//   /game/?sessao=7&cadencia=12&min=0&max=60&altmin=0&altmax=30&duracao=2&reps=10&series=3&ordem=saudavel
 const $ = id => document.getElementById(id);
 const url = new URLSearchParams(location.search);
 const cfg = {
   cadencia: +url.get('cadencia') || 12,     // repetições por minuto
   min: +(url.get('min') ?? 0),              // ângulo da posição baixa (°) do braço em uso
   max: +(url.get('max') ?? 60),             // ângulo da posição alta (°) do braço em uso
+  altMin: +(url.get('altmin') ?? 0),        // altura da posição baixa (cm) do braço em uso
+  altMax: +(url.get('altmax') ?? 30),       // altura da posição alta (cm) do braço em uso
+  controle: url.get('controle') === 'angulo' ? 'angulo' : 'altura',  // o que move o pássaro
   duracao: +url.get('duracao') || 2,        // minutos por série (limite)
   reps: +url.get('reps') || 0,              // repetições por série (0 = livre, termina pelo tempo)
   series: +url.get('series') || 1,          // número de séries; cada série é feita com os dois braços
@@ -149,45 +168,75 @@ const outro = b => b === 'saudavel' ? 'afetado' : 'saudavel';
 // Plano da sessão: em cada série, os dois braços (na ordem escolhida pelo profissional)
 const plano = [];
 for (let n = 1; n <= cfg.series; n++) plano.push({ n, braco: cfg.ordem }, { n, braco: outro(cfg.ordem) });
-const amplitudes = { saudavel: { min: cfg.min, max: cfg.max }, afetado: { min: cfg.min, max: cfg.max } };
+const amp0 = () => ({ min: cfg.min, max: cfg.max, altMin: cfg.altMin, altMax: cfg.altMax });
+const amplitudes = { saudavel: amp0(), afetado: amp0() };
 
 // ===================== ESTADO =====================
 let estado = 'aguardando';                  // aguardando | jogando | intervalo | fim
 let etapa = 0, serieId = null, resultados = [];
 let fonte = null, ultimoPacote = 0;         // 'haltere' | 'sim'
 let janela = [], theta = 0, vel = 0, tAnt = null;
+let avisouSemAltura = false, temAltura = false, altura = 0, velAlt = 0, zOffset = 0, parado = false, repMinAlt = 0;
 let fase = 'baixo', tUltimaRep = null, repMin = 0, repMax = 0, velPico = 0, reps = [];
 let canos = [], proxCano = 0, proxTipo = 'alto', pontos = 0, passados = 0, totalCanos = 0, tJogo = 0, pulso = 0;
 let W = 0, H = 0;
 const atual = () => plano[Math.min(etapa, plano.length - 1)];
 
 // ===================== DADOS DO HALTERE =====================
-// Pacote: t_ms,theta,ax,ay,az — o jogo usa t e θ
+// Pacote: t_ms,theta,ax,ay,az,z_cm,parado — o jogo usa t, θ e a altura z
+// (firmware antigo, sem z: o jogo continua funcionando pelo ângulo)
 function receber(linha) {
   if (linha.startsWith('#')) return;                       // mensagens de status
-  const [t, th] = linha.split(',').map(Number);
+  const [t, th, , , , z, par] = linha.split(',').map(Number);
   if (!isFinite(t) || !isFinite(th)) return;               // dado inválido
   ultimoPacote = performance.now();
-  processar(t / 1000, th);
+  processar(t / 1000, th, isFinite(z) ? z : null, par === 1);
 }
 
-function processar(t, th) {
+function processar(t, th, z, quieto) {
+  const dt = tAnt !== null && t > tAnt ? t - tAnt : 0;
   // Filtro: média móvel das últimas K = 10 amostras (memorial 5.7) — reduz o efeito do tremor no jogo
   janela.push(th); if (janela.length > 10) janela.shift();
   const novo = janela.reduce((a, b) => a + b) / janela.length;
   // Velocidade angular por diferenças finitas: (θᵢ − θᵢ₋₁) / Δt
-  if (tAnt !== null && t > tAnt) vel = (novo - theta) / (t - tAnt);
-  theta = novo; tAnt = t;
+  if (dt) vel = (novo - theta) / dt;
+  theta = novo;
+  if (z !== null) {
+    // A altura do firmware é relativa e deriva devagar: o jogo soma um deslocamento (zOffset) e o corrige
+    if (!temAltura) { temAltura = true; zOffset = cfg.altMin - z; mostrarControle(); }  // começa na posição baixa
+    parado = quieto;
+    if (estado === 'jogando' && quieto) ancorar(z + zOffset, 0.1, 0.25);
+    const nova = z + zOffset;
+    if (dt) velAlt = (nova - altura) / dt;
+    altura = nova;
+  } else if (!avisouSemAltura) { avisouSemAltura = true; mostrarControle(); }
+  tAnt = t;
   if (estado === 'jogando') detectarRepeticao(t);
 }
 
-// Progresso do movimento: 0 = posição baixa, 1 = posição alta (funciona mesmo se o ângulo diminuir ao subir)
-const progresso = th => (th - cfg.min) / ((cfg.max - cfg.min) || 1);
+// Correção de deriva: a posição baixa é a de repouso, sempre a mesma. Quando a altura medida está perto dela
+// (dentro de 'tolerancia' × amplitude), puxa o deslocamento uma fração 'ganho' do erro em direção a ela.
+// A posição alta não é usada como âncora: o braço afetado pode não chegar lá, e isso precisa aparecer.
+function ancorar(h, ganho, tolerancia) {
+  const amp = Math.abs(cfg.altMax - cfg.altMin) || 1, erro = cfg.altMin - h;
+  if (Math.abs(erro) < tolerancia * amp) zOffset += ganho * erro;
+}
+function zerarAltura() { if (temAltura) { zOffset += cfg.altMin - altura; altura = cfg.altMin; } }
+
+// Progresso do movimento: 0 = posição baixa, 1 = posição alta (funciona mesmo se o valor diminuir ao subir)
+const usaAltura = () => cfg.controle === 'altura' && temAltura;
+const progresso = () => usaAltura()
+  ? (altura - cfg.altMin) / ((cfg.altMax - cfg.altMin) || 1)
+  : (theta - cfg.min) / ((cfg.max - cfg.min) || 1);
+const velProgresso = () => usaAltura()                       // progresso por segundo (inclina o pássaro)
+  ? velAlt / ((cfg.altMax - cfg.altMin) || 1)
+  : vel / ((cfg.max - cfg.min) || 1);
 
 function detectarRepeticao(t) {
   repMin = Math.min(repMin, theta); repMax = Math.max(repMax, theta);
+  repMinAlt = Math.min(repMinAlt, altura);
   velPico = Math.max(velPico, Math.abs(vel));
-  const p = progresso(theta);
+  const p = progresso();
   if (fase === 'baixo' && p > 0.7) fase = 'alto';          // histerese: sobe acima de 70 %
   else if (fase === 'alto' && p < 0.3) {                    // ... e volta abaixo de 30 % → 1 repetição
     fase = 'baixo';
@@ -210,7 +259,10 @@ function registrarRepeticao(t) {
   if (noRitmo === null) mostrarFeedback('Boa! Continue no ritmo', 'var(--acento)');
   else if (noRitmo) mostrarFeedback('No ritmo ✓', 'var(--ok)');
   else mostrarFeedback(dur < T ? 'Mais devagar' : 'Mais rápido', 'var(--aviso)');
-  tUltimaRep = t; repMin = repMax = theta; velPico = 0;
+  // A cada repetição o haltere voltou à posição baixa: corrige 80 % da deriva medida no ponto mais baixo
+  // (funciona mesmo se o paciente não fizer pausa e o firmware nunca detectar repouso)
+  if (temAltura) ancorar(repMinAlt, 0.8, 0.4);
+  tUltimaRep = t; repMin = repMax = theta; repMinAlt = altura; velPico = 0;
   if (cfg.reps && reps.length >= cfg.reps) encerrarSerie();  // atingiu as repetições da série
 }
 
@@ -227,7 +279,7 @@ function conectar() {
 }
 
 // --- Modo simulado: um "paciente virtual" que segue a trilha dos canos ---
-// Gera o pacote completo (θ e aceleração linear) como o ESP32. O braço afetado é simulado com menos
+// Gera o pacote completo (θ, aceleração linear e altura com uma deriva lenta) como o ESP32. O braço afetado é simulado com menos
 // amplitude, atraso, mais tremor e mais compensação lateral. Com sessão, os dados vão para o backend.
 const PERFIL = {
   saudavel: { ganho: 1.0, atraso: 0.08, tremor: 0.03, lateral: 0.03 },
@@ -236,15 +288,15 @@ const PERFIL = {
 let simTimer = null, brutos = [];
 function simular() {
   pararSimulacao(); fonte = 'sim'; status('🧪 Modo simulado');
-  let fs = 0, tAntSim = performance.now(), thSim = cfg.min, omegaF = 0, alfaF = 0;
+  let fs = 0, tAntSim = performance.now(), thSim = cfg.min, omegaF = 0, alfaF = 0, deriva = 0, sAnt = 0, quietoT = 0;
   const R = 0.3;                                                   // raio do movimento (m)
   simTimer = setInterval(() => {
     const agora = performance.now(), dt = Math.max(0.001, (agora - tAntSim) / 1000), perfil = PERFIL[atual().braco];
     fs += 2 * Math.PI * dt / periodo(); tAntSim = agora;
-    let alvo = 0.5 - 0.5 * Math.cos(fs);                            // fora do jogo: senoide na cadência
+    let alvo = estado === 'jogando' ? 0.5 - 0.5 * Math.cos(fs) : 0;  // fora do jogo: descansa na posição baixa
     const x = W * 0.25, prox = canos.find(c => c.x + LARG / 2 > x), ant = canos.findLast(c => c.x + LARG / 2 <= x);
     if (estado === 'jogando' && prox) {                             // no jogo: vai de um cano ao próximo
-      const p1 = prox.tipo === 'alto' ? 1 : 0, p0 = ant ? 1 - p1 : progresso(theta);
+      const p1 = prox.tipo === 'alto' ? 1 : 0, p0 = ant ? 1 - p1 : (thSim - cfg.min) / ((cfg.max - cfg.min) || 1);
       const x0 = ant ? ant.x + LARG / 2 : 0, f = Math.min(1, Math.max(0, (x - x0) / (prox.x + LARG / 2 - x0)));
       alvo = p0 + (p1 - p0) * (0.5 - 0.5 * Math.cos(Math.PI * f));
     }
@@ -258,7 +310,12 @@ function simular() {
     const trem = perfil.tremor * Math.sin(2 * Math.PI * 6 * agora / 1000), ruido = () => (Math.random() - 0.5) * 0.04;
     const az = R * alfa + trem + ruido(), ay = R * omega * omega + 0.5 * trem + ruido();
     const ax = perfil.lateral * R * alfa + ruido();
-    const linha = `${Math.round(agora)},${(thSim + (Math.random() - 0.5)).toFixed(2)},${ax.toFixed(3)},${ay.toFixed(3)},${az.toFixed(3)}`;
+    // altura: mesma fração do movimento que o ângulo, + deriva de 0,5 cm/s (como a integração do firmware)
+    const s = (thSim - cfg.min) / ((cfg.max - cfg.min) || 1);
+    deriva += 0.5 * dt;
+    const zSim = cfg.altMin + s * (cfg.altMax - cfg.altMin) + deriva + (Math.random() - 0.5) * 0.3;
+    quietoT = Math.abs(s - sAnt) / dt < 0.05 ? quietoT + dt : 0; sAnt = s;   // parado há 0,1 s → repouso
+    const linha = `${Math.round(agora)},${(thSim + (Math.random() - 0.5)).toFixed(2)},${ax.toFixed(3)},${ay.toFixed(3)},${az.toFixed(3)},${zSim.toFixed(1)},${quietoT >= 0.1 ? 1 : 0}`;
     if (cfg.sessao && estado !== 'fim') brutos.push(linha);
     receber(linha);
   }, 20);
@@ -286,7 +343,7 @@ function prepararEtapa() {
   // Troca a amplitude para a do braço da vez e mostra quem é o próximo
   const { n, braco } = atual();
   Object.assign(cfg, amplitudes[braco]);
-  $('min').value = cfg.min; $('max').value = cfg.max;
+  for (const k of ['min', 'max', 'altMin', 'altMax']) $(k).value = cfg[k];
   $('amplitudeBraco').textContent = NOME[braco].toLowerCase();
   $('chipSerie').innerHTML = `Série ${n}/${cfg.series} · <span class="braco ${braco}">${NOME[braco]}</span>`;
   $('plano').innerHTML = plano.map((e, i) =>
@@ -303,10 +360,11 @@ async function iniciarSerie() {
     if (!r) { $('btIniciar').disabled = false; return alert('Não foi possível registrar a série. Verifique se a sessão ainda está aberta na plataforma.'); }
     serieId = r.id;
   }
+  if (parado) zerarAltura();                                 // a série começa com o haltere parado na posição baixa
   estado = 'jogando';
   canos = []; proxCano = 1; proxTipo = 'alto'; pontos = passados = totalCanos = 0; tJogo = 0;
-  reps = []; tUltimaRep = null; repMin = repMax = theta; velPico = 0;
-  fase = progresso(theta) > 0.5 ? 'alto' : 'baixo';
+  reps = []; tUltimaRep = null; repMin = repMax = theta; repMinAlt = altura; velPico = 0;
+  fase = progresso() > 0.5 ? 'alto' : 'baixo';
   $('intervalo').classList.remove('on'); $('btEncerrar').disabled = false;
 }
 
@@ -405,15 +463,12 @@ function voltar() {
 
 // ===================== JOGO =====================
 const LARG = 64;                                            // largura do cano
-const yDe = th => {                                         // ângulo → altura na tela
-  const p = Math.min(1.1, Math.max(-0.1, progresso(th)));
-  return H * 0.82 - p * H * 0.64;
-};
-const passaro = () => ({ x: W * 0.25, y: yDe(theta), r: 18 });
+const yDe = p => H * 0.82 - Math.min(1.1, Math.max(-0.1, p)) * H * 0.64;   // progresso → altura na tela
+const passaro = () => ({ x: W * 0.25, y: yDe(progresso()), r: 18 });
 
 function criarCano() {
   // Canos alternam: abertura no alto (levantar o haltere) e embaixo (abaixar)
-  canos.push({ x: W, tipo: proxTipo, yAbre: yDe(proxTipo === 'alto' ? cfg.max : cfg.min), bateu: false, contado: false });
+  canos.push({ x: W, tipo: proxTipo, yAbre: yDe(proxTipo === 'alto' ? 1 : 0), bateu: false, contado: false });
   proxTipo = proxTipo === 'alto' ? 'baixo' : 'alto';
 }
 
@@ -426,7 +481,7 @@ function atualizar(dt) {
   const p = passaro(), gap = H * 0.34;
   for (const c of canos) {
     c.x -= vx * dt;
-    c.yAbre = yDe(c.tipo === 'alto' ? cfg.max : cfg.min);   // segue ajustes de amplitude
+    c.yAbre = yDe(c.tipo === 'alto' ? 1 : 0);
     const sobrepoe = c.x < p.x + p.r * 0.6 && c.x + LARG > p.x - p.r * 0.6;
     if (sobrepoe && Math.abs(p.y - c.yAbre) > gap / 2 - p.r * 0.6) c.bateu = true;
     if (!c.contado && c.x + LARG < p.x - p.r) {
@@ -448,9 +503,9 @@ function desenhar() {
 
   // Linhas de referência das posições alta e baixa
   g.setLineDash([4, 6]); g.strokeStyle = '#0f172a33'; g.lineWidth = 1;
-  for (const [th, txt] of [[cfg.max, 'alto'], [cfg.min, 'baixo']]) {
-    g.beginPath(); g.moveTo(0, yDe(th)); g.lineTo(W, yDe(th)); g.stroke();
-    g.fillStyle = '#0f172a88'; g.font = '12px system-ui'; g.fillText(txt, 8, yDe(th) - 6);
+  for (const [p, txt] of [[1, 'alto'], [0, 'baixo']]) {
+    g.beginPath(); g.moveTo(0, yDe(p)); g.lineTo(W, yDe(p)); g.stroke();
+    g.fillStyle = '#0f172a88'; g.font = '12px system-ui'; g.fillText(txt, 8, yDe(p) - 6);
   }
 
   // Trilha ideal: liga as aberturas dos canos e mostra o ritmo esperado
@@ -477,7 +532,7 @@ function desenhar() {
 
   // Pássaro (inclina conforme a velocidade do movimento)
   g.save(); g.translate(p.x, p.y);
-  g.rotate(Math.max(-0.6, Math.min(0.6, -vel * Math.sign(cfg.max - cfg.min) / 200)));
+  g.rotate(Math.max(-0.6, Math.min(0.6, -0.3 * velProgresso())));
   g.fillStyle = '#facc15'; g.beginPath(); g.arc(0, 0, p.r, 0, 7); g.fill();
   g.fillStyle = '#f59e0b'; g.beginPath(); g.ellipse(-6, 4, 9, 5, -0.4, 0, 7); g.fill();        // asa
   g.fillStyle = '#fff'; g.beginPath(); g.arc(7, -6, 6, 0, 7); g.fill();
@@ -535,6 +590,7 @@ function atualizarHud() {
   const av = reps.filter(r => r.no_ritmo !== null);
   $('hRitmo').textContent = av.length ? Math.round(100 * av.filter(r => r.no_ritmo).length / av.length) + ' %' : '–';
   $('thetaAtual').textContent = fonte ? theta.toFixed(1) : '–';
+  $('alturaAtual').textContent = fonte && temAltura ? altura.toFixed(1) : '–';
 }
 let audio;
 function bip(freq) {
@@ -564,7 +620,22 @@ $('mais').onclick = () => definirCadencia(cfg.cadencia + 1);
 for (const k of ['min', 'max']) $(k).oninput = e => { if (e.target.value !== '') definirAmplitude(k, +e.target.value); };
 $('duracao').value = cfg.duracao;
 $('duracao').oninput = e => { if (e.target.value !== '') cfg.duracao = +e.target.value; };
-document.querySelectorAll('[data-usar]').forEach(b => b.onclick = () => { if (fonte) definirAmplitude(b.dataset.usar, Math.round(theta)); });
+for (const k of ['altMin', 'altMax']) $(k).oninput = e => { if (e.target.value !== '') definirAmplitude(k, +e.target.value); };
+document.querySelectorAll('[data-usar]').forEach(b => b.onclick = () => {   // grava ângulo e altura da posição atual
+  if (!fonte) return;
+  const k = b.dataset.usar;
+  definirAmplitude(k, Math.round(theta));
+  if (temAltura) definirAmplitude(k === 'min' ? 'altMin' : 'altMax', Math.round(altura));
+});
+$('btZerar').onclick = zerarAltura;
+function mostrarControle() {
+  $('controle').value = cfg.controle;
+  $('controleInfo').textContent = cfg.controle === 'altura'
+    ? (fonte && !temAltura ? '⚠️ O haltere não está enviando altura (firmware antigo): o jogo usa o ângulo.'
+                           : 'O pássaro acompanha o quanto o haltere sobe e desce. Faça uma pausa curta em cima e embaixo.')
+    : 'O pássaro acompanha a rotação do haltere. Indicado para punho e pronação/supinação.';
+}
+$('controle').onchange = e => { cfg.controle = e.target.value; mostrarControle(); };
 $('btConectar').onclick = conectar;
 $('btSimular').onclick = simular;
 $('btIniciar').onclick = iniciarSerie;
@@ -572,6 +643,7 @@ $('btEncerrar').onclick = encerrarSerie;
 
 definirCadencia(cfg.cadencia);
 prepararEtapa();
+mostrarControle();
 if (location.protocol.startsWith('http')) conectar();       // aberto pelo backend: já escuta o haltere
 addEventListener('resize', redimensionar);
 redimensionar();
