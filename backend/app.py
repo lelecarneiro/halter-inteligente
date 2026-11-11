@@ -58,7 +58,10 @@ def publicar(evento, dado):
 def receber(_, dados: bytearray):
     """Chamada a cada pacote BLE do ESP32: 't_ms,theta,ax,ay,az,z_cm,parado' (firmware antigo: só os 5 primeiros)."""
     linha = dados.decode(errors='ignore').strip()
-    if not linha or linha.startswith('#'):
+    if not linha:
+        return
+    if linha.startswith('#'):          # mensagem de estado do haltere (ex.: calibração): repassa ao jogo
+        publicar('aviso', linha[1:])
         return
     publicar('dado', linha)
     arquivo = gravacao

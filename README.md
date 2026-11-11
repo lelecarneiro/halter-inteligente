@@ -262,6 +262,7 @@ Se o sinal do haltere cair, o jogo **pausa sozinho** e retoma quando os dados vo
 | Altura | Direção da gravidade em 3D: girada pelo giroscópio (`dg/dt = −ω × g`) e corrigida devagar rumo ao acelerômetro; aceleração vertical = projeção de **a** nessa direção − g |
 | Altura | Integração dupla por Euler (`v ← v + a·Δt`, `z ← z + v·Δt`) a 100 Hz |
 | Viés do acelerômetro | Ajuste de esfera por mínimos quadrados: em repouso `|a − b| = g`, ou seja `|a|² = 2a·b + c` (linear em b e c); equações normais 4×4 resolvidas por Gauss-Jordan com pivoteamento; resultado salvo na memória do ESP32 |
+| Aquecimento | Num repouso firme de 1,5 s (sem rotação e \|a\| constante), o firmware ajusta devagar o g medido e o desvio do giroscópio, que mudam quando o chip esquenta. Leituras I2C com falha são descartadas |
 | Altura | Correção de deriva: repouso detectado por médias móveis de 0,17 s (zera a velocidade), desconto do erro linear `v·t_mov/2` ao parar, viés da aceleração aprendido em repouso e amortecimento da velocidade após 3 s sem repouso |
 
 ### No jogo (`frontend/game/index.html`)
@@ -385,6 +386,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 | Análise sem métricas de tremor, jerk etc. | Não houve leituras do haltere durante a série. Confira a conexão, ou use o modo simulado para testar |
 | Erro de banco depois de atualizar o projeto | O banco é atualizado automaticamente ao iniciar o backend. Se o erro continuar, apague `data/halter.db` (o histórico será perdido) |
 | Gráficos não aparecem | Verifique a conexão com a internet (o Chart.js vem de um CDN) |
+| Pássaro se mexe com o haltere parado ou altura errada | Veja se o LED verde está **piscando** (ou o aviso no painel do jogo): falta calibrar. Deixe o haltere parado ~1 s com cada uma das 6 faces para cima. No Monitor Serial, o último campo do pacote deve ser `1` com o haltere parado |
 | Arduino IDE não compila | Instale o pacote de placas **esp32** da Espressif em Ferramentas → Placa → Gerenciador de placas |
 
 ---
