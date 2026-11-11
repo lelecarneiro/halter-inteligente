@@ -56,7 +56,7 @@ def publicar(evento, dado):
 
 
 def receber(_, dados: bytearray):
-    """Chamada a cada pacote BLE do ESP32: 't_ms,theta,ax,ay,az'."""
+    """Chamada a cada pacote BLE do ESP32: 't_ms,theta,ax,ay,az,z_cm,parado' (firmware antigo: só os 5 primeiros)."""
     linha = dados.decode(errors='ignore').strip()
     if not linha or linha.startswith('#'):
         return
@@ -303,13 +303,14 @@ def arred(x, casas=3):
 
 
 def ler_brutos(sid):
-    """Leituras gravadas durante a sessão: colunas t_ms, θ, ax, ay, az (linhas incompletas são ignoradas)."""
+    """Leituras gravadas durante a sessão: colunas t_ms, θ, ax, ay, az (z_cm e parado, se houver, não entram
+    na análise; linhas incompletas são ignoradas)."""
     arquivo = BRUTOS / f'sessao_{sid}.csv'
     if not arquivo.exists():
         return None
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        d = np.genfromtxt(arquivo, delimiter=',', skip_header=1, invalid_raise=False, ndmin=2)
+        d = np.genfromtxt(arquivo, delimiter=',', skip_header=1, invalid_raise=False, ndmin=2, usecols=range(5))
     d = d[np.isfinite(d).all(axis=1)] if d.size else d
     return d[np.argsort(d[:, 0], kind='stable')] if len(d) >= 10 else None
 
@@ -654,7 +655,7 @@ def criar_sessao():
     if gravacao:
         gravacao.close()
     gravacao = open(BRUTOS / f'sessao_{sid}.csv', 'w', buffering=1)
-    gravacao.write('t_ms,theta,ax,ay,az\n')
+    gravacao.write('t_ms,theta,ax,ay,az,z_cm,parado\n')
     gravacao_sid, gravacao_simulada = sid, False
     jogo = (f"/game/?sessao={sid}&cadencia={cfg['cadencia_alvo']:g}&min={cfg['amp_min']:g}&max={cfg['amp_max']:g}"
             f"&duracao={cfg['duracao_min']:g}&reps={cfg['reps_alvo'] or ''}&series={cfg['series_alvo']}&ordem={cfg['ordem']}")
@@ -726,7 +727,7 @@ def receber_brutos(sid):
     validas = []
     for linha in request.get_json(force=True)['linhas'][:5000]:
         partes = str(linha).split(',')
-        if len(partes) == 5 and all(np.isfinite(float(p)) for p in partes):
+        if len(partes) in (5, 7) and all(np.isfinite(float(p)) for p in partes):
             validas.append(','.join(partes))
     gravacao.write(''.join(l + '\n' for l in validas))
     return jsonify(gravadas=len(validas))
