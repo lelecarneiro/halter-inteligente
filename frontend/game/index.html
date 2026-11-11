@@ -284,7 +284,7 @@ function conectar() {
 }
 
 // --- Modo simulado: um "paciente virtual" que segue a trilha dos canos ---
-// Gera o pacote completo (θ, aceleração linear e altura com uma deriva lenta) como o ESP32; o jogo só usa a altura. O braço afetado é simulado com menos
+// Gera o pacote completo (θ, aceleração linear e altura) como o ESP32; o jogo só usa a altura. O braço afetado é simulado com menos
 // amplitude, atraso, mais tremor e mais compensação lateral. Com sessão, os dados vão para o backend.
 const PERFIL = {
   saudavel: { ganho: 1.0, atraso: 0.08, tremor: 0.03, lateral: 0.03 },
@@ -293,7 +293,7 @@ const PERFIL = {
 let simTimer = null, brutos = [];
 function simular() {
   pararSimulacao(); fonte = 'sim'; status('🧪 Modo simulado');
-  let fs = 0, tAntSim = performance.now(), thSim = cfg.min, omegaF = 0, alfaF = 0, deriva = 0, sAnt = 0, quietoT = 0;
+  let fs = 0, tAntSim = performance.now(), thSim = cfg.min, omegaF = 0, alfaF = 0, deriva = 0, sAnt = 0, quietoT = 0, zSim = cfg.altMin;
   const R = 0.3;                                                   // raio do movimento (m)
   simTimer = setInterval(() => {
     const agora = performance.now(), dt = Math.max(0.001, (agora - tAntSim) / 1000), perfil = PERFIL[atual().braco];
@@ -315,11 +315,14 @@ function simular() {
     const trem = perfil.tremor * Math.sin(2 * Math.PI * 6 * agora / 1000), ruido = () => (Math.random() - 0.5) * 0.04;
     const az = R * alfa + trem + ruido(), ay = R * omega * omega + 0.5 * trem + ruido();
     const ax = perfil.lateral * R * alfa + ruido();
-    // altura: mesma fração do movimento que o ângulo, + deriva de 0,5 cm/s (como a integração do firmware)
+    // altura: mesma fração do movimento que o ângulo. Como no firmware: parado, a altura fica congelada;
+    // em movimento, acumula uma deriva pequena (0,3 cm/s) que o jogo corrige ao voltar à posição baixa
     const s = (thSim - cfg.min) / ((cfg.max - cfg.min) || 1);
-    deriva += 0.5 * dt;
-    const zSim = cfg.altMin + s * (cfg.altMax - cfg.altMin) + deriva + (Math.random() - 0.5) * 0.3;
     quietoT = Math.abs(s - sAnt) / dt < 0.05 ? quietoT + dt : 0; sAnt = s;   // parado há 0,1 s → repouso
+    if (quietoT < 0.1) {
+      deriva += 0.3 * dt;
+      zSim = cfg.altMin + s * (cfg.altMax - cfg.altMin) + deriva + (Math.random() - 0.5) * 0.2;
+    }
     const linha = `${Math.round(agora)},${(thSim + (Math.random() - 0.5)).toFixed(2)},${ax.toFixed(3)},${ay.toFixed(3)},${az.toFixed(3)},${zSim.toFixed(1)},${quietoT >= 0.1 ? 1 : 0}`;
     if (cfg.sessao && estado !== 'fim') brutos.push(linha);
     receber(linha);
