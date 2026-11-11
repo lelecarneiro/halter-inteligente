@@ -215,6 +215,20 @@ function ancorar(h, ganho, tolerancia) {
   const amp = Math.abs(cfg.altMax - cfg.altMin) || 1, erro = cfg.altMin - h;
   if (Math.abs(erro) < tolerancia * amp) zOffset += ganho * erro;
 }
+// Mensagens de estado do firmware: enquanto o acelerômetro não foi calibrado, a altura fica errada
+let haltereCalibrado = null;
+function avisoDoHaltere(msg) {
+  const m = msg.match(/^CALIBRANDO (\d+)\/(\d+)/);
+  if (m) {
+    haltereCalibrado = false;
+    $('alturaAviso').innerHTML = `⚠️ <b>Haltere não calibrado</b> (${m[1]}/${m[2]} posições): a altura fica errada e pode
+      mudar sozinha. Deixe o haltere parado ~1 s com cada uma das 6 faces para cima, até o LED verde ficar aceso.`;
+  } else if (msg.startsWith('CALIBRADO')) {
+    haltereCalibrado = true;
+    $('alturaAviso').textContent = '✅ Haltere calibrado.';
+    setTimeout(() => { if (haltereCalibrado) $('alturaAviso').textContent = ''; }, 4000);
+  }
+}
 function zerarAltura() { if (temAltura) { zOffset += cfg.altMin - altura; altura = cfg.altMin; } }
 
 // Progresso do movimento: 0 = posição baixa, 1 = posição alta. Depende SÓ da altura (movimento vertical);
@@ -265,6 +279,7 @@ function conectar() {
   stream = new EventSource('/api/stream');                      // reconecta sozinho se o backend cair
   stream.addEventListener('dado', e => { if (fonte === 'haltere') receber(e.data); });
   stream.addEventListener('status', e => { if (fonte === 'haltere') status('Haltere: ' + e.data); });
+  stream.addEventListener('aviso', e => { if (fonte === 'haltere') avisoDoHaltere(e.data); });
   stream.onerror = () => { if (fonte === 'haltere') status('⚠️ Backend fora do ar — tentando reconectar…'); };
 }
 

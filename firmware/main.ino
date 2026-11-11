@@ -29,6 +29,8 @@ const float BETA = 0.1;         // passo da descida do gradiente
 // ---------- Altura: detecção de repouso (valores testados em simulação; ajuste com o haltere real) ----------
 const int   JANELA = 17;             // média móvel de 0,17 s (≈ 1 ciclo de tremor de 6 Hz, que assim se cancela)
 const float REPOUSO_ACEL = 0.05;     // m/s²  — média de (|a| − g) abaixo disso: sem aceleração linear
+const float APRENDE = 0.005;         // em repouso firme, quanto g e o desvio do giroscópio se ajustam por leitura
+const int   FIRME_MIN = 150;         // repouso firme por 1,5 s antes de aprender (não aprende nas pausas curtas entre repetições)
 const float REPOUSO_GIRO = 5.0;      // °/s   — média da rotação abaixo disso
 const float REPOUSO_VEL  = 0.10;     // m/s   — velocidade estimada abaixo disso
 const int   REPOUSO_CURTO = 10;      // 0,1 s quieto e com velocidade baixa → parado
@@ -58,7 +60,7 @@ float gLocal = G;              // módulo da gravidade medido na calibração (a
 float vz = 0, z = 0;           // velocidade (m/s) e altura (m) verticais
 float viesZ = 0;               // viés da aceleração vertical, aprendido em repouso
 float tMov = 0;                // tempo desde o último repouso (s)
-int nQuieto = 0, iJanela = 0;
+int nQuieto = 0, iJanela = 0, nFirme = 0;
 float bufA[JANELA], bufM[JANELA], bufW[JANELA][3];   // janelas da média móvel (zeradas: variáveis globais)
 Preferences memoria;
 bool calibrado = false;
@@ -71,14 +73,22 @@ bool parado = true;
 unsigned long tAnterior;
 int contador = 0;
 
+// Mensagem de estado ('#...'): vai pela Serial e, se conectado, pelo Bluetooth (o jogo mostra na tela)
+void avisa(const char *msg) {
+  Serial.println(msg);
+  if (conectado) { tx->setValue((uint8_t *)msg, strlen(msg)); tx->notify(); }
+}
+
 // ---------- Funções auxiliares de I2C ----------
 void escreve(byte reg, byte val) {
   Wire.beginTransmission(MPU); Wire.write(reg); Wire.write(val); Wire.endTransmission();
 }
-void le(byte reg, int n, int16_t *dest) {  // lê n palavras de 16 bits a partir de reg
-  Wire.beginTransmission(MPU); Wire.write(reg); Wire.endTransmission(false);
-  Wire.requestFrom(MPU, n * 2);
+bool le(byte reg, int n, int16_t *dest) {  // lê n palavras de 16 bits a partir de reg; false se a leitura falhou
+  Wire.beginTransmission(MPU); Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom(MPU, n * 2) != n * 2) return false;
   for (int i = 0; i < n; i++) { int alto = Wire.read(); dest[i] = (alto << 8) | Wire.read(); }
+  return true;
 }
 bool sensorConectado() {
   Wire.beginTransmission(MPU); Wire.write(0x75); Wire.endTransmission(false);
@@ -118,7 +128,7 @@ void setup() {
   float somaA[3] = {0, 0, 0};
   int16_t r[7];
   for (int i = 0; i < 500; i++) {
-    le(0x3B, 7, r);
+    while (!le(0x3B, 7, r)) delay(2);
     for (int k = 0; k < 3; k++) { somaA[k] += r[k] / ESC_ACEL * G; offGiro[k] += r[4 + k] / ESC_GIRO; }
     delay(2);
   }
@@ -197,7 +207,9 @@ void ajustaEsfera() {
   memoria.putFloat("bx", viesA[0]); memoria.putFloat("by", viesA[1]); memoria.putFloat("bz", viesA[2]);
   memoria.putBool("cal", true);
   digitalWrite(LED_VERDE, HIGH);
-  Serial.printf("#CALIBRADO vies=%.3f,%.3f,%.3f g=%.3f\n", viesA[0], viesA[1], viesA[2], gLocal);
+  char msg[80];
+  snprintf(msg, sizeof(msg), "#CALIBRADO vies=%.3f,%.3f,%.3f g=%.3f", viesA[0], viesA[1], viesA[2], gLocal);
+  avisa(msg);
 }
 
 // Fecha uma pose de repouso (média das leituras brutas) e guarda se for uma direção nova
@@ -212,7 +224,7 @@ void fechaPose() {
   for (int k = 0; k < 3; k++) poses[proxPose][k] = m[k];
   proxPose = (proxPose + 1) % MAX_POSES;
   if (nPoses < MAX_POSES) nPoses++;
-  if (!calibrado) Serial.printf("#CALIBRANDO %d/%d posicoes\n", nPoses, MIN_POSES);
+  if (!calibrado) { char msg[40]; snprintf(msg, sizeof(msg), "#CALIBRANDO %d/%d", min(nPoses, MIN_POSES), MIN_POSES); avisa(msg); }
   if (nPoses >= MIN_POSES) ajustaEsfera();
 }
 
@@ -250,8 +262,18 @@ void estimaAltura(const float aBruta[3], const float w[3], float dt) {
   float modW = sqrt(mW[0] * mW[0] + mW[1] * mW[1] + mW[2] * mW[2]) / JANELA * RAD_TO_DEG;
   bool quieto = fabs(mA) < REPOUSO_ACEL && modW < REPOUSO_GIRO;
 
-  // Repouso firme (sem rotação e |a| constante): junta leituras brutas para a calibração do viés
-  if (modW < FIRME_GIRO && mMax - mMin < FIRME_ACEL) {
+  // Repouso firme: sem rotação e |a| constante. Não depende do valor de g, então continua funcionando quando
+  // o chip esquenta e o g medido ao ligar fica desatualizado
+  bool firme = modW < FIRME_GIRO && mMax - mMin < FIRME_ACEL;
+  nFirme = firme ? nFirme + 1 : 0;
+  if (nFirme >= FIRME_MIN && parado) {
+    // O aquecimento muda devagar o g medido e o desvio do giroscópio: num repouso firme, acompanha os dois
+    gLocal += APRENDE * (bufA[(iJanela + JANELA - 1) % JANELA]);   // |a sem viés| − g da leitura atual → 0
+    for (int i = 0; i < 3; i++) offGiro[i] += APRENDE * w[i] * RAD_TO_DEG;   // parado, ω deveria ser 0
+  }
+
+  // Repouso firme: junta leituras brutas para a calibração do viés
+  if (firme) {
     for (int k = 0; k < 3; k++) somaPose[k] += aBruta[k];
     if (++nPose == 100) fechaPose();                    // 1 s parado → uma pose
   } else {
@@ -284,6 +306,11 @@ void loop() {
   // Comando pelo Monitor Serial: R apaga a calibração do viés e reinicia
   if (Serial.available() && toupper(Serial.read()) == 'R') { memoria.clear(); ESP.restart(); }
   if (!calibrado) digitalWrite(LED_VERDE, (millis() / 250) % 2);   // pisca enquanto não calibrou
+  static unsigned long ultimoAviso = 0;                              // lembra o jogo a cada 2 s
+  if (!calibrado && millis() - ultimoAviso > 2000) {
+    ultimoAviso = millis();
+    char msg[40]; snprintf(msg, sizeof(msg), "#CALIBRANDO %d/%d", min(nPoses, MIN_POSES), MIN_POSES); avisa(msg);
+  }
 
   unsigned long agora = micros();
   if (agora - tAnterior < 10000) return;  // 100 Hz
@@ -292,7 +319,8 @@ void loop() {
 
   // Lê acelerômetro, temperatura (ignorada) e giroscópio de uma vez
   int16_t r[7];
-  le(0x3B, 7, r);
+  if (!le(0x3B, 7, r)) return;                          // leitura I2C falhou: descarta
+  if (r[0] == -1 && r[1] == -1 && r[2] == -1 && r[4] == -1) return;   // barramento devolveu só 0xFF: descarta
 
   // Corrige offset e converte unidades
   float ax = r[0] / ESC_ACEL * G, ay = r[1] / ESC_ACEL * G, az = r[2] / ESC_ACEL * G;  // m/s²
