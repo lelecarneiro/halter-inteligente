@@ -5,10 +5,17 @@
  * Pacote CSV: t_ms,theta_graus,ax,ay,az,z_cm,parado
  *   ax, ay, az = aceleração linear em m/s² · z_cm = altura relativa (cm, positivo para cima)
  *   parado = 1 quando o haltere está em repouso (o jogo usa para corrigir a deriva da altura)
+ *
+ * A altura só pode mudar com o movimento VERTICAL. Girar o haltere não deve mexer nela, mas o acelerômetro
+ * tem um erro de fábrica (viés, até ~0,8 m/s² por eixo) que, ao girar, vira uma falsa aceleração vertical.
+ * Por isso o firmware aprende esse viés sozinho (ajuste de esfera por mínimos quadrados) e o guarda na memória:
+ * na PRIMEIRA vez, com o LED verde piscando, deixe o haltere parado ~1 s com cada uma das 6 faces para cima.
+ * Quando o LED verde ficar aceso direto, está calibrado. Para refazer, envie R pelo Monitor Serial.
  */
 #include <Wire.h>
 #include <BLEDevice.h>
 #include <BLE2902.h>
+#include <Preferences.h>
 
 // ---------- Pinos e constantes ----------
 #define MPU 0x68
@@ -29,6 +36,13 @@ const int   REPOUSO_LONGO = 150;     // 1,5 s quieto → parado, qualquer que se
 const float MOV_MAX = 3.0;           // s sem repouso: a partir daí a velocidade é amortecida (limita a deriva)
 const float TAU_FUGA = 2.0;          // s — constante de tempo desse amortecimento
 
+// ---------- Calibração do viés do acelerômetro ----------
+const int   MAX_POSES = 12;          // poses de repouso guardadas para o ajuste
+const int   MIN_POSES = 6;           // mínimo para ajustar (ex.: as 6 faces)
+const float POSE_DIST = 0.906;       // cos 25°: poses mais próximas que isso contam como a mesma
+const float FIRME_GIRO = 3.0;        // °/s  — repouso firme: quase sem rotação...
+const float FIRME_ACEL = 0.25;       // m/s² — ...e |a| quase constante na janela (não depende do viés)
+
 // ---------- BLE (serviço UART da Nordic) ----------
 BLECharacteristic *tx;
 bool conectado = false;
@@ -45,7 +59,14 @@ float vz = 0, z = 0;           // velocidade (m/s) e altura (m) verticais
 float viesZ = 0;               // viés da aceleração vertical, aprendido em repouso
 float tMov = 0;                // tempo desde o último repouso (s)
 int nQuieto = 0, iJanela = 0;
-float bufA[JANELA], bufW[JANELA][3];   // janelas da média móvel (zeradas: variáveis globais)
+float bufA[JANELA], bufM[JANELA], bufW[JANELA][3];   // janelas da média móvel (zeradas: variáveis globais)
+Preferences memoria;
+bool calibrado = false;
+float viesA[3] = {0, 0, 0};    // viés do acelerômetro (m/s², eixos do sensor)
+float poses[MAX_POSES][3];     // média de |a| bruta em cada pose de repouso
+int nPoses = 0, proxPose = 0;
+float somaPose[3] = {0, 0, 0};
+int nPose = 0;
 bool parado = true;
 unsigned long tAnterior;
 int contador = 0;
@@ -84,7 +105,14 @@ void setup() {
   escreve(0x1B, 0x08);  // giroscópio ±500 °/s
   escreve(0x1C, 0x08);  // acelerômetro ±4 g
 
-  // 3. Calibração: média de 500 amostras em repouso (LED vermelho aceso)
+  // 3. Viés do acelerômetro salvo numa calibração anterior?
+  memoria.begin("halter", false);
+  if (memoria.getBool("cal", false)) {
+    viesA[0] = memoria.getFloat("bx"); viesA[1] = memoria.getFloat("by"); viesA[2] = memoria.getFloat("bz");
+    calibrado = true;
+  }
+
+  // 4. Calibração: média de 500 amostras em repouso (LED vermelho aceso)
   //    giroscópio → offsets dos 3 eixos · acelerômetro → direção e módulo da gravidade
   digitalWrite(LED_VERMELHO, HIGH);
   float somaA[3] = {0, 0, 0};
@@ -94,13 +122,15 @@ void setup() {
     for (int k = 0; k < 3; k++) { somaA[k] += r[k] / ESC_ACEL * G; offGiro[k] += r[4 + k] / ESC_GIRO; }
     delay(2);
   }
-  for (int k = 0; k < 3; k++) { grav[k] = somaA[k] / 500; offGiro[k] /= 500; }
-  gLocal = sqrt(grav[0] * grav[0] + grav[1] * grav[1] + grav[2] * grav[2]);
+  for (int k = 0; k < 3; k++) { offGiro[k] /= 500; grav[k] = somaA[k] / 500; }
   theta = atan2(grav[1], grav[2]) * RAD_TO_DEG;
+  for (int k = 0; k < 3; k++) grav[k] -= viesA[k];
+  gLocal = sqrt(grav[0] * grav[0] + grav[1] * grav[1] + grav[2] * grav[2]);
   digitalWrite(LED_VERMELHO, LOW);
   digitalWrite(LED_VERDE, HIGH);
+  Serial.println(calibrado ? "#CALIBRADO" : "#CALIBRAR: deixe o haltere parado ~1 s com cada face para cima");
 
-  // 4. BLE
+  // 5. BLE
   BLEDevice::init("Haltere");
   BLEDevice::setMTU(100);  // pacote inteiro em uma notificação (o padrão corta em 20 bytes)
   BLEServer *servidor = BLEDevice::createServer();
@@ -112,12 +142,84 @@ void setup() {
   BLEDevice::startAdvertising();
   Serial.println("#PRONTO");
 
-  // 5. Inicia temporizadores
+  // 6. Inicia temporizadores
   tAnterior = micros();
 }
 
+// Resolve o sistema 4×4 M·x = coluna 4 por eliminação de Gauss-Jordan com pivoteamento parcial
+bool resolve4(double M[4][5], double x[4]) {
+  for (int c = 0; c < 4; c++) {
+    int p = c;
+    for (int r = c + 1; r < 4; r++) if (fabs(M[r][c]) > fabs(M[p][c])) p = r;
+    if (fabs(M[p][c]) < 1e-9) return false;
+    for (int k = 0; k < 5; k++) { double t = M[c][k]; M[c][k] = M[p][k]; M[p][k] = t; }
+    for (int r = 0; r < 4; r++) {
+      if (r == c) continue;
+      double f = M[r][c] / M[c][c];
+      for (int k = c; k < 5; k++) M[r][k] -= f * M[c][k];
+    }
+  }
+  for (int i = 0; i < 4; i++) x[i] = M[i][4] / M[i][i];
+  return true;
+}
+
+// Ajuste de esfera: em repouso |a − b| = g para toda pose. Expandindo, |a|² = 2a·b + c, com c = g² − |b|²,
+// que é linear em (b, c) → mínimos quadrados pelas equações normais (AᵀA)x = Aᵀy
+void ajustaEsfera() {
+  // As poses precisam cobrir direções variadas: det(Σ u·uᵀ / n) ≈ 0,037 com as 6 faces, ≈ 0 num cone estreito
+  double S[3][3] = {{0}};
+  for (int i = 0; i < nPoses; i++) {
+    float n = sqrt(poses[i][0] * poses[i][0] + poses[i][1] * poses[i][1] + poses[i][2] * poses[i][2]);
+    for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++) S[r][c] += poses[i][r] / n * poses[i][c] / n / nPoses;
+  }
+  double det = S[0][0] * (S[1][1] * S[2][2] - S[1][2] * S[2][1]) - S[0][1] * (S[1][0] * S[2][2] - S[1][2] * S[2][0])
+             + S[0][2] * (S[1][0] * S[2][1] - S[1][1] * S[2][0]);
+  if (det < 0.004) return;
+
+  double M[4][5] = {{0}};
+  for (int i = 0; i < nPoses; i++) {
+    double linha[4] = {2 * poses[i][0], 2 * poses[i][1], 2 * poses[i][2], 1};
+    double y = poses[i][0] * poses[i][0] + poses[i][1] * poses[i][1] + poses[i][2] * poses[i][2];
+    for (int r = 0; r < 4; r++) { for (int c = 0; c < 4; c++) M[r][c] += linha[r] * linha[c]; M[r][4] += linha[r] * y; }
+  }
+  double x[4];
+  if (!resolve4(M, x)) return;
+  double b2 = x[0] * x[0] + x[1] * x[1] + x[2] * x[2], g = sqrt(x[3] + b2);
+  if (sqrt(b2) > 1.5 || !(g > 9.0 && g < 10.6)) return;   // resultado sem sentido físico: ignora
+
+  for (int k = 0; k < 3; k++) viesA[k] = x[k];
+  gLocal = g; viesZ = 0; calibrado = true;
+  float n = 0;                                           // reinicia a gravidade pela pose mais recente
+  int ult = (proxPose + MAX_POSES - 1) % MAX_POSES;
+  for (int k = 0; k < 3; k++) { grav[k] = poses[ult][k] - viesA[k]; n += grav[k] * grav[k]; }
+  n = sqrt(n);
+  for (int k = 0; k < 3; k++) grav[k] *= gLocal / n;
+  memoria.putFloat("bx", viesA[0]); memoria.putFloat("by", viesA[1]); memoria.putFloat("bz", viesA[2]);
+  memoria.putBool("cal", true);
+  digitalWrite(LED_VERDE, HIGH);
+  Serial.printf("#CALIBRADO vies=%.3f,%.3f,%.3f g=%.3f\n", viesA[0], viesA[1], viesA[2], gLocal);
+}
+
+// Fecha uma pose de repouso (média das leituras brutas) e guarda se for uma direção nova
+void fechaPose() {
+  float m[3], n = 0;
+  for (int k = 0; k < 3; k++) { m[k] = somaPose[k] / nPose; n += m[k] * m[k]; somaPose[k] = 0; }
+  nPose = 0; n = sqrt(n);
+  for (int i = 0; i < nPoses; i++) {
+    float ni = sqrt(poses[i][0] * poses[i][0] + poses[i][1] * poses[i][1] + poses[i][2] * poses[i][2]);
+    if ((m[0] * poses[i][0] + m[1] * poses[i][1] + m[2] * poses[i][2]) / (n * ni) > POSE_DIST) return;
+  }
+  for (int k = 0; k < 3; k++) poses[proxPose][k] = m[k];
+  proxPose = (proxPose + 1) % MAX_POSES;
+  if (nPoses < MAX_POSES) nPoses++;
+  if (!calibrado) Serial.printf("#CALIBRANDO %d/%d posicoes\n", nPoses, MIN_POSES);
+  if (nPoses >= MIN_POSES) ajustaEsfera();
+}
+
 // Altura vertical: integração dupla da aceleração na direção da gravidade, com correções de deriva
-void estimaAltura(const float a[3], const float w[3], float dt) {
+void estimaAltura(const float aBruta[3], const float w[3], float dt) {
+  float a[3] = {aBruta[0] - viesA[0], aBruta[1] - viesA[1], aBruta[2] - viesA[2]};   // sem o viés de fábrica
+
   // 1. Gira a gravidade com o giroscópio (vetor fixo no mundo visto do sensor: dg/dt = −ω × g)
   float c0 = w[1] * grav[2] - w[2] * grav[1];
   float c1 = w[2] * grav[0] - w[0] * grav[2];
@@ -136,13 +238,27 @@ void estimaAltura(const float a[3], const float w[3], float dt) {
   // 4. Detecção de repouso (ZUPT): sem aceleração linear e sem rotação por um tempo.
   //    Usa médias móveis com sinal: o tremor oscila em torno de zero e se cancela, o movimento real não
   bufA[iJanela] = sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) - gLocal;
+  bufM[iJanela] = sqrt(aBruta[0] * aBruta[0] + aBruta[1] * aBruta[1] + aBruta[2] * aBruta[2]);
   for (int i = 0; i < 3; i++) bufW[iJanela][i] = w[i];
   iJanela = (iJanela + 1) % JANELA;
-  float mA = 0, mW[3] = {0, 0, 0};
-  for (int j = 0; j < JANELA; j++) { mA += bufA[j]; for (int i = 0; i < 3; i++) mW[i] += bufW[j][i]; }
+  float mA = 0, mW[3] = {0, 0, 0}, mMin = 1e9, mMax = 0;
+  for (int j = 0; j < JANELA; j++) {
+    mA += bufA[j]; for (int i = 0; i < 3; i++) mW[i] += bufW[j][i];
+    mMin = min(mMin, bufM[j]); mMax = max(mMax, bufM[j]);
+  }
   mA /= JANELA;
   float modW = sqrt(mW[0] * mW[0] + mW[1] * mW[1] + mW[2] * mW[2]) / JANELA * RAD_TO_DEG;
   bool quieto = fabs(mA) < REPOUSO_ACEL && modW < REPOUSO_GIRO;
+
+  // Repouso firme (sem rotação e |a| constante): junta leituras brutas para a calibração do viés
+  if (modW < FIRME_GIRO && mMax - mMin < FIRME_ACEL) {
+    for (int k = 0; k < 3; k++) somaPose[k] += aBruta[k];
+    if (++nPose == 100) fechaPose();                    // 1 s parado → uma pose
+  } else {
+    if (nPose >= 30) fechaPose();                        // parou pelo menos 0,3 s
+    for (int k = 0; k < 3; k++) somaPose[k] = 0;
+    nPose = 0;
+  }
   nQuieto = quieto ? nQuieto + 1 : 0;
   // a velocidade alta evita confundir o meio de um movimento lento (aceleração ≈ 0) com repouso
   bool agoraParado = (nQuieto >= REPOUSO_CURTO && fabs(vz) < REPOUSO_VEL) || nQuieto >= REPOUSO_LONGO;
@@ -150,7 +266,8 @@ void estimaAltura(const float a[3], const float w[3], float dt) {
   if (agoraParado) {
     // Ao parar, a velocidade deveria ser 0. Supondo que o erro cresceu linearmente durante o movimento,
     // o erro acumulado na altura é vz·tMov/2 → desconta de uma vez
-    if (!parado) z -= vz * tMov / 2;
+    // (só vale para movimentos curtos: depois de MOV_MAX a velocidade já foi amortecida e a hipótese não vale)
+    if (!parado && tMov <= MOV_MAX) z -= vz * tMov / 2;
     vz = 0; tMov = 0;
     viesZ += 0.01 * aVert;               // em repouso aVert deveria ser 0: o que sobra é viés
   } else {
@@ -164,6 +281,10 @@ void estimaAltura(const float a[3], const float w[3], float dt) {
 }
 
 void loop() {
+  // Comando pelo Monitor Serial: R apaga a calibração do viés e reinicia
+  if (Serial.available() && toupper(Serial.read()) == 'R') { memoria.clear(); ESP.restart(); }
+  if (!calibrado) digitalWrite(LED_VERDE, (millis() / 250) % 2);   // pisca enquanto não calibrou
+
   unsigned long agora = micros();
   if (agora - tAnterior < 10000) return;  // 100 Hz
   float dt = (agora - tAnterior) / 1e6;
@@ -179,7 +300,7 @@ void loop() {
   float wy = r[5] / ESC_GIRO - offGiro[1];
   float wz = r[6] / ESC_GIRO - offGiro[2];
 
-  // Altura vertical (usa a aceleração bruta, com gravidade, e os 3 eixos do giroscópio)
+  // Altura vertical (usa a aceleração bruta, com gravidade, e os 3 eixos do giroscópio; só o movimento vertical conta)
   float a[3] = {ax, ay, az}, w[3] = {(float)(wx * DEG_TO_RAD), (float)(wy * DEG_TO_RAD), (float)(wz * DEG_TO_RAD)};
   estimaAltura(a, w, dt);
 

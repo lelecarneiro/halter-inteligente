@@ -75,8 +75,11 @@ Sessão  (paciente + exercício + configuração)
 | LED | Significado |
 |---|---|
 | Vermelho aceso | Calibrando: não mexa no haltere |
+| Verde piscando | Falta calibrar o acelerômetro (só na primeira vez, veja abaixo) |
 | Verde aceso | Pronto para uso |
 | Vermelho piscando | Sensor não encontrado (confira os fios SDA/SCL) |
+
+5. **Só na primeira vez** (verde piscando): deixe o haltere **parado por ~1 s com cada uma das 6 faces para cima** (em cima, embaixo, e os 4 lados). O firmware calcula o erro de fábrica do acelerômetro e guarda na memória do ESP32; o verde fica aceso. Sem isso, girar o haltere faria o pássaro se mexer. Para refazer a calibração, envie `R` pelo Monitor Serial (115200 baud).
 
 **Ligações:**
 
@@ -258,13 +261,14 @@ Se o sinal do haltere cair, o jogo **pausa sozinho** e retoma quando os dados vo
 | 5.4.3 | Subtração da gravidade nos eixos Y e Z |
 | Altura | Direção da gravidade em 3D: girada pelo giroscópio (`dg/dt = −ω × g`) e corrigida devagar rumo ao acelerômetro; aceleração vertical = projeção de **a** nessa direção − g |
 | Altura | Integração dupla por Euler (`v ← v + a·Δt`, `z ← z + v·Δt`) a 100 Hz |
+| Viés do acelerômetro | Ajuste de esfera por mínimos quadrados: em repouso `|a − b| = g`, ou seja `|a|² = 2a·b + c` (linear em b e c); equações normais 4×4 resolvidas por Gauss-Jordan com pivoteamento; resultado salvo na memória do ESP32 |
 | Altura | Correção de deriva: repouso detectado por médias móveis de 0,17 s (zera a velocidade), desconto do erro linear `v·t_mov/2` ao parar, viés da aceleração aprendido em repouso e amortecimento da velocidade após 3 s sem repouso |
 
 ### No jogo (`frontend/game/index.html`)
 
 | Cálculo | Método |
 |---|---|
-| Controle | O pássaro segue a **altura** do haltere (subida e descida) ou, se escolhido no painel, o **ângulo θ** |
+| Controle | O pássaro, os canos e a contagem de repetições seguem **só a altura** do haltere (movimento vertical). Girar o haltere não move o pássaro. θ só é guardado nos registros enviados à plataforma |
 | Âncora da altura | A posição baixa é a de repouso: ao parar perto dela e a cada repetição, o jogo corrige a deriva da altura. A posição alta nunca é usada como âncora, para não mascarar um braço que não chega lá |
 | Suavização da curva | Média móvel das últimas K = 10 amostras (5.7) |
 | Velocidade angular | Diferenças finitas `(θᵢ − θᵢ₋₁) / Δt` |
@@ -335,7 +339,7 @@ t_ms,theta,ax,ay,az,z_cm,parado
 ```
 `t_ms` é o tempo em ms, `theta` é o ângulo em graus, `ax, ay, az` é a aceleração linear em m/s², `z_cm` é a altura relativa do haltere em cm (positiva para cima) e `parado` vale 1 quando o haltere está em repouso. Pacotes antigos, só com os 5 primeiros campos, continuam aceitos: o jogo passa a usar o ângulo.
 
-**Limites da altura.** A altura vem da integração dupla do acelerômetro e funciona melhor com movimentos de até ~3 s por subida e uma **pausa curta (≥ 0,3 s) em cima e embaixo**. Em movimentos muito lentos a aceleração fica no nível do ruído do MPU-6050; para punho e pronação/supinação, que quase não sobem nem descem, use o controle por ângulo. Os limites da detecção de repouso, no início do firmware, foram testados só em simulação e devem ser ajustados com o haltere real.
+**Limites da altura.** A altura vem da integração dupla do acelerômetro e funciona melhor com movimentos de até ~3 s por subida e uma **pausa curta (≥ 0,3 s) em cima e embaixo**. Em movimentos muito lentos a aceleração fica no nível do ruído do MPU-6050. Exercícios que quase não sobem nem descem (punho, pronação/supinação) praticamente não movem o pássaro. Girar o haltere sem parar, sem nenhuma pausa, ainda faz a altura derivar devagar (~15 cm em 20 s na simulação); ao parar na posição baixa o jogo corrige. Os limites da detecção de repouso, no início do firmware, foram testados só em simulação e devem ser ajustados com o haltere real.
 
 ### Parâmetros do jogo (URL)
 A plataforma abre o jogo com a configuração na URL, por exemplo:
@@ -343,7 +347,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 ```
 /game/?sessao=7&cadencia=12&min=0&max=60&altmin=0&altmax=30&duracao=2&reps=10&series=3&ordem=saudavel
 ```
-`min`/`max` são a amplitude em graus e `altmin`/`altmax` em cm (padrão 0 e 30). `controle=angulo` faz o jogo seguir o ângulo em vez da altura.
+`altmin`/`altmax` são as posições baixa e alta em cm (padrão 0 e 30) e são o que move o jogo. `min`/`max` (graus) não movem o jogo: só são repassados à análise da plataforma.
 
 ### API do backend
 

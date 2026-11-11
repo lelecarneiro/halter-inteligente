@@ -101,15 +101,6 @@
   </section>
 
   <section>
-    <h2>Controle do jogo</h2>
-    <label><select id="controle">
-      <option value="altura">Subida e descida do haltere (altura)</option>
-      <option value="angulo">Rotação do haltere (ângulo θ)</option>
-    </select></label>
-    <p class="sub" id="controleInfo"></p>
-  </section>
-
-  <section>
     <h2>Cadência alvo (profissional)</h2>
     <div id="cad"></div>
     <div class="linha">
@@ -122,14 +113,14 @@
 
   <section>
     <h2>Amplitude — <span id="amplitudeBraco"></span></h2>
-    <p>Altura: <b id="alturaAtual">–</b> cm · θ: <b id="thetaAtual">–</b>°
+    <p>Altura do haltere: <b id="alturaAtual">–</b> cm
       <button id="btZerar" title="Considera a altura atual como a posição baixa">zerar</button></p>
-    <label class="amp"><span>Posição baixa</span><input id="altMin" type="number" step="1"><span class="un">cm</span>
-      <input id="min" type="number" step="1"><span class="un">°</span><button data-usar="min">atual</button></label>
-    <label class="amp"><span>Posição alta</span><input id="altMax" type="number" step="1"><span class="un">cm</span>
-      <input id="max" type="number" step="1"><span class="un">°</span><button data-usar="max">atual</button></label>
-    <p class="sub">Cada braço guarda a sua amplitude. Peça ao paciente para ir até cada posição e toque em “atual”: grava a altura e o ângulo juntos.
-      A série começa com o haltere parado na posição baixa.</p>
+    <label class="amp"><span>Posição baixa</span><input id="altMin" type="number" step="1"><span class="un">cm</span><button data-usar="min">atual</button></label>
+    <label class="amp"><span>Posição alta</span><input id="altMax" type="number" step="1"><span class="un">cm</span><button data-usar="max">atual</button></label>
+    <p class="sub">O pássaro sobe e desce junto com o haltere: só conta o movimento vertical, girar o haltere não move o pássaro.
+      Cada braço guarda a sua amplitude: peça ao paciente para ir até cada posição e toque em “atual”.
+      A série começa com o haltere parado na posição baixa; uma pausa curta em cima e embaixo deixa a altura mais precisa.</p>
+    <p class="sub" id="alturaAviso" style="color:var(--aviso)"></p>
   </section>
 
   <section>
@@ -150,11 +141,10 @@ const $ = id => document.getElementById(id);
 const url = new URLSearchParams(location.search);
 const cfg = {
   cadencia: +url.get('cadencia') || 12,     // repetições por minuto
-  min: +(url.get('min') ?? 0),              // ângulo da posição baixa (°) do braço em uso
-  max: +(url.get('max') ?? 60),             // ângulo da posição alta (°) do braço em uso
-  altMin: +(url.get('altmin') ?? 0),        // altura da posição baixa (cm) do braço em uso
-  altMax: +(url.get('altmax') ?? 30),       // altura da posição alta (cm) do braço em uso
-  controle: url.get('controle') === 'angulo' ? 'angulo' : 'altura',  // o que move o pássaro
+  altMin: +(url.get('altmin') ?? 0),        // altura da posição baixa (cm) do braço em uso — move o jogo
+  altMax: +(url.get('altmax') ?? 30),       // altura da posição alta (cm) do braço em uso — move o jogo
+  min: +(url.get('min') ?? 0),              // ângulo baixo/alto (°) configurado na plataforma: NÃO move o jogo,
+  max: +(url.get('max') ?? 60),             //   só é repassado ao backend para a análise de trajetória
   duracao: +url.get('duracao') || 2,        // minutos por série (limite)
   reps: +url.get('reps') || 0,              // repetições por série (0 = livre, termina pelo tempo)
   series: +url.get('series') || 1,          // número de séries; cada série é feita com os dois braços
@@ -183,7 +173,8 @@ let W = 0, H = 0;
 const atual = () => plano[Math.min(etapa, plano.length - 1)];
 
 // ===================== DADOS DO HALTERE =====================
-// Pacote: t_ms,theta,ax,ay,az,z_cm,parado — o jogo usa t, θ e a altura z
+// Pacote: t_ms,theta,ax,ay,az,z_cm,parado — o pássaro, os canos e a contagem de repetições usam só a altura z.
+// θ é guardado apenas para os registros enviados à plataforma (amplitude e velocidade de cada repetição).
 // (firmware antigo, sem z: o jogo continua funcionando pelo ângulo)
 function receber(linha) {
   if (linha.startsWith('#')) return;                       // mensagens de status
@@ -203,13 +194,16 @@ function processar(t, th, z, quieto) {
   theta = novo;
   if (z !== null) {
     // A altura do firmware é relativa e deriva devagar: o jogo soma um deslocamento (zOffset) e o corrige
-    if (!temAltura) { temAltura = true; zOffset = cfg.altMin - z; mostrarControle(); }  // começa na posição baixa
+    if (!temAltura) { temAltura = true; zOffset = cfg.altMin - z; $('alturaAviso').textContent = ''; }  // começa na posição baixa
     parado = quieto;
     if (estado === 'jogando' && quieto) ancorar(z + zOffset, 0.1, 0.25);
     const nova = z + zOffset;
     if (dt) velAlt = (nova - altura) / dt;
     altura = nova;
-  } else if (!avisouSemAltura) { avisouSemAltura = true; mostrarControle(); }
+  } else if (!avisouSemAltura) {
+    avisouSemAltura = true;
+    $('alturaAviso').textContent = '⚠️ O haltere não está enviando a altura: grave o firmware novo (firmware/main.ino).';
+  }
   tAnt = t;
   if (estado === 'jogando') detectarRepeticao(t);
 }
@@ -223,14 +217,10 @@ function ancorar(h, ganho, tolerancia) {
 }
 function zerarAltura() { if (temAltura) { zOffset += cfg.altMin - altura; altura = cfg.altMin; } }
 
-// Progresso do movimento: 0 = posição baixa, 1 = posição alta (funciona mesmo se o valor diminuir ao subir)
-const usaAltura = () => cfg.controle === 'altura' && temAltura;
-const progresso = () => usaAltura()
-  ? (altura - cfg.altMin) / ((cfg.altMax - cfg.altMin) || 1)
-  : (theta - cfg.min) / ((cfg.max - cfg.min) || 1);
-const velProgresso = () => usaAltura()                       // progresso por segundo (inclina o pássaro)
-  ? velAlt / ((cfg.altMax - cfg.altMin) || 1)
-  : vel / ((cfg.max - cfg.min) || 1);
+// Progresso do movimento: 0 = posição baixa, 1 = posição alta. Depende SÓ da altura (movimento vertical);
+// o ângulo θ não entra no jogo
+const progresso = () => temAltura ? (altura - cfg.altMin) / ((cfg.altMax - cfg.altMin) || 1) : 0;
+const velProgresso = () => velAlt / ((cfg.altMax - cfg.altMin) || 1);   // progresso por segundo (inclina o pássaro)
 
 function detectarRepeticao(t) {
   repMin = Math.min(repMin, theta); repMax = Math.max(repMax, theta);
@@ -279,7 +269,7 @@ function conectar() {
 }
 
 // --- Modo simulado: um "paciente virtual" que segue a trilha dos canos ---
-// Gera o pacote completo (θ, aceleração linear e altura com uma deriva lenta) como o ESP32. O braço afetado é simulado com menos
+// Gera o pacote completo (θ, aceleração linear e altura com uma deriva lenta) como o ESP32; o jogo só usa a altura. O braço afetado é simulado com menos
 // amplitude, atraso, mais tremor e mais compensação lateral. Com sessão, os dados vão para o backend.
 const PERFIL = {
   saudavel: { ganho: 1.0, atraso: 0.08, tremor: 0.03, lateral: 0.03 },
@@ -343,7 +333,7 @@ function prepararEtapa() {
   // Troca a amplitude para a do braço da vez e mostra quem é o próximo
   const { n, braco } = atual();
   Object.assign(cfg, amplitudes[braco]);
-  for (const k of ['min', 'max', 'altMin', 'altMax']) $(k).value = cfg[k];
+  for (const k of ['altMin', 'altMax']) $(k).value = cfg[k];
   $('amplitudeBraco').textContent = NOME[braco].toLowerCase();
   $('chipSerie').innerHTML = `Série ${n}/${cfg.series} · <span class="braco ${braco}">${NOME[braco]}</span>`;
   $('plano').innerHTML = plano.map((e, i) =>
@@ -352,6 +342,7 @@ function prepararEtapa() {
 
 async function iniciarSerie() {
   if (!fonte) return alert('Conecte o haltere ou use o modo simulado.');
+  if (!temAltura) return alert('O haltere não está enviando a altura. Grave o firmware novo no ESP32.');
   if (estado === 'jogando' || estado === 'fim') return;
   const { n, braco } = atual();
   $('btIniciar').disabled = true;
@@ -589,7 +580,6 @@ function atualizarHud() {
   $('hReps').textContent = cfg.reps ? `${reps.length}/${cfg.reps}` : reps.length;
   const av = reps.filter(r => r.no_ritmo !== null);
   $('hRitmo').textContent = av.length ? Math.round(100 * av.filter(r => r.no_ritmo).length / av.length) + ' %' : '–';
-  $('thetaAtual').textContent = fonte ? theta.toFixed(1) : '–';
   $('alturaAtual').textContent = fonte && temAltura ? altura.toFixed(1) : '–';
 }
 let audio;
@@ -617,25 +607,13 @@ function definirAmplitude(k, v) {                           // guarda na amplitu
 $('cadencia').oninput = e => definirCadencia(+e.target.value);
 $('menos').onclick = () => definirCadencia(cfg.cadencia - 1);
 $('mais').onclick = () => definirCadencia(cfg.cadencia + 1);
-for (const k of ['min', 'max']) $(k).oninput = e => { if (e.target.value !== '') definirAmplitude(k, +e.target.value); };
 $('duracao').value = cfg.duracao;
 $('duracao').oninput = e => { if (e.target.value !== '') cfg.duracao = +e.target.value; };
 for (const k of ['altMin', 'altMax']) $(k).oninput = e => { if (e.target.value !== '') definirAmplitude(k, +e.target.value); };
-document.querySelectorAll('[data-usar]').forEach(b => b.onclick = () => {   // grava ângulo e altura da posição atual
-  if (!fonte) return;
-  const k = b.dataset.usar;
-  definirAmplitude(k, Math.round(theta));
-  if (temAltura) definirAmplitude(k === 'min' ? 'altMin' : 'altMax', Math.round(altura));
+document.querySelectorAll('[data-usar]').forEach(b => b.onclick = () => {   // grava a altura da posição atual
+  if (temAltura) definirAmplitude(b.dataset.usar === 'min' ? 'altMin' : 'altMax', Math.round(altura));
 });
 $('btZerar').onclick = zerarAltura;
-function mostrarControle() {
-  $('controle').value = cfg.controle;
-  $('controleInfo').textContent = cfg.controle === 'altura'
-    ? (fonte && !temAltura ? '⚠️ O haltere não está enviando altura (firmware antigo): o jogo usa o ângulo.'
-                           : 'O pássaro acompanha o quanto o haltere sobe e desce. Faça uma pausa curta em cima e embaixo.')
-    : 'O pássaro acompanha a rotação do haltere. Indicado para punho e pronação/supinação.';
-}
-$('controle').onchange = e => { cfg.controle = e.target.value; mostrarControle(); };
 $('btConectar').onclick = conectar;
 $('btSimular').onclick = simular;
 $('btIniciar').onclick = iniciarSerie;
@@ -643,7 +621,6 @@ $('btEncerrar').onclick = encerrarSerie;
 
 definirCadencia(cfg.cadencia);
 prepararEtapa();
-mostrarControle();
 if (location.protocol.startsWith('http')) conectar();       // aberto pelo backend: já escuta o haltere
 addEventListener('resize', redimensionar);
 redimensionar();
