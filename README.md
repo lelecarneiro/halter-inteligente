@@ -79,7 +79,7 @@ Sessão  (paciente + exercício + configuração)
 | Verde aceso | Pronto para uso |
 | Vermelho piscando | Sensor não encontrado (confira os fios SDA/SCL) |
 
-5. **Só na primeira vez** (verde piscando): deixe o haltere **parado por ~1 s com cada uma das 6 faces para cima** (em cima, embaixo, e os 4 lados). O firmware calcula o erro de fábrica do acelerômetro e guarda na memória do ESP32; o verde fica aceso. Sem isso, girar o haltere faria o pássaro se mexer. Para refazer a calibração, envie `R` pelo Monitor Serial (115200 baud).
+5. **Só na primeira vez** (verde piscando): deixe o haltere **parado por ~1 s com cada uma das 6 faces para cima** (em cima, embaixo, e os 4 lados). O firmware calcula os erros de fábrica do acelerômetro (viés e escala de cada eixo) e guarda na memória do ESP32; o verde fica aceso. Sem isso, girar o haltere faria o pássaro se mexer. Para refazer a calibração, envie `R` pelo Monitor Serial (115200 baud).
 
 **Ligações:**
 
@@ -261,8 +261,9 @@ Se o sinal do haltere cair, o jogo **pausa sozinho** e retoma quando os dados vo
 | 5.4.3 | Subtração da gravidade nos eixos Y e Z |
 | Altura | Direção da gravidade em 3D: girada pelo giroscópio (`dg/dt = −ω × g`) e corrigida devagar rumo ao acelerômetro; aceleração vertical = projeção de **a** nessa direção − g |
 | Altura | Integração dupla por Euler (`v ← v + a·Δt`, `z ← z + v·Δt`) a 100 Hz |
-| Viés do acelerômetro | Ajuste de esfera por mínimos quadrados: em repouso `|a − b| = g`, ou seja `|a|² = 2a·b + c` (linear em b e c); equações normais 4×4 resolvidas por Gauss-Jordan com pivoteamento; resultado salvo na memória do ESP32 |
-| Aquecimento | Num repouso firme de 1,5 s (sem rotação e \|a\| constante), o firmware ajusta devagar o g medido e o desvio do giroscópio, que mudam quando o chip esquenta. Leituras I2C com falha são descartadas |
+| Viés e escala do acelerômetro | Ajuste de elipsoide por mínimos quadrados: em repouso as leituras ficam sobre `A·ax² + B·ay² + C·az² + D·ax + E·ay + F·az = 1` (linear em A…F); equações normais 6×6 resolvidas por Gauss-Jordan com pivoteamento; completando quadrados saem o viés `bᵢ = −Dᵢ/2Aᵢ` e a escala de cada eixo; resultado salvo na memória do ESP32 |
+| Aquecimento | Num repouso firme de 1,5 s (sem rotação e \|a\| constante), o firmware ajusta devagar o desvio do giroscópio e, se já estiver parado, o g medido, que mudam quando o chip esquenta. Leituras I2C com falha são descartadas |
+| Repouso | Histerese: para sair do estado parado, o movimento precisa passar do dobro dos limites de entrada, o que evita a altura pular com o ruído |
 | Altura | Correção de deriva: repouso detectado por médias móveis de 0,17 s (zera a velocidade), desconto do erro linear `v·t_mov/2` ao parar, viés da aceleração aprendido em repouso e amortecimento da velocidade após 3 s sem repouso |
 
 ### No jogo (`frontend/game/index.html`)

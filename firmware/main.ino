@@ -7,8 +7,9 @@
  *   parado = 1 quando o haltere está em repouso (o jogo usa para corrigir a deriva da altura)
  *
  * A altura só pode mudar com o movimento VERTICAL. Girar o haltere não deve mexer nela, mas o acelerômetro
- * tem um erro de fábrica (viés, até ~0,8 m/s² por eixo) que, ao girar, vira uma falsa aceleração vertical.
- * Por isso o firmware aprende esse viés sozinho (ajuste de esfera por mínimos quadrados) e o guarda na memória:
+ * tem erros de fábrica (viés de até ~0,8 m/s² e escala de até ±3 % por eixo) que, ao girar, viram uma falsa
+ * aceleração vertical. Por isso o firmware aprende esses erros sozinho (ajuste de elipsoide por mínimos
+ * quadrados) e os guarda na memória:
  * na PRIMEIRA vez, com o LED verde piscando, deixe o haltere parado ~1 s com cada uma das 6 faces para cima.
  * Quando o LED verde ficar aceso direto, está calibrado. Para refazer, envie R pelo Monitor Serial.
  */
@@ -29,6 +30,7 @@ const float BETA = 0.1;         // passo da descida do gradiente
 // ---------- Altura: detecção de repouso (valores testados em simulação; ajuste com o haltere real) ----------
 const int   JANELA = 17;             // média móvel de 0,17 s (≈ 1 ciclo de tremor de 6 Hz, que assim se cancela)
 const float REPOUSO_ACEL = 0.05;     // m/s²  — média de (|a| − g) abaixo disso: sem aceleração linear
+const float HISTERESE = 2.0;         // parado, só sai do repouso com o dobro dos limites (evita piscar parado/movendo)
 const float APRENDE = 0.005;         // em repouso firme, quanto g e o desvio do giroscópio se ajustam por leitura
 const int   FIRME_MIN = 150;         // repouso firme por 1,5 s antes de aprender (não aprende nas pausas curtas entre repetições)
 const float REPOUSO_GIRO = 5.0;      // °/s   — média da rotação abaixo disso
@@ -56,7 +58,7 @@ struct Callbacks : BLEServerCallbacks {
 // ---------- Estado ----------
 float offGiro[3] = {0, 0, 0}, theta = 0;
 float grav[3];                 // direção da gravidade no referencial do sensor (m/s²)
-float gLocal = G;              // módulo da gravidade medido na calibração (absorve erro de escala)
+float gLocal = G;              // módulo da gravidade medido (ajustado em repouso, acompanha o aquecimento)
 float vz = 0, z = 0;           // velocidade (m/s) e altura (m) verticais
 float viesZ = 0;               // viés da aceleração vertical, aprendido em repouso
 float tMov = 0;                // tempo desde o último repouso (s)
@@ -65,6 +67,7 @@ float bufA[JANELA], bufM[JANELA], bufW[JANELA][3];   // janelas da média móvel
 Preferences memoria;
 bool calibrado = false;
 float viesA[3] = {0, 0, 0};    // viés do acelerômetro (m/s², eixos do sensor)
+float escA[3] = {1, 1, 1};     // correção de escala do acelerômetro por eixo
 float poses[MAX_POSES][3];     // média de |a| bruta em cada pose de repouso
 int nPoses = 0, proxPose = 0;
 float somaPose[3] = {0, 0, 0};
@@ -117,8 +120,9 @@ void setup() {
 
   // 3. Viés do acelerômetro salvo numa calibração anterior?
   memoria.begin("halter", false);
-  if (memoria.getBool("cal", false)) {
+  if (memoria.getBool("cal2", false)) {          // "cal2": viés + escala (a calibração antiga, só viés, é refeita)
     viesA[0] = memoria.getFloat("bx"); viesA[1] = memoria.getFloat("by"); viesA[2] = memoria.getFloat("bz");
+    escA[0] = memoria.getFloat("kx", 1); escA[1] = memoria.getFloat("ky", 1); escA[2] = memoria.getFloat("kz", 1);
     calibrado = true;
   }
 
@@ -134,7 +138,7 @@ void setup() {
   }
   for (int k = 0; k < 3; k++) { offGiro[k] /= 500; grav[k] = somaA[k] / 500; }
   theta = atan2(grav[1], grav[2]) * RAD_TO_DEG;
-  for (int k = 0; k < 3; k++) grav[k] -= viesA[k];
+  for (int k = 0; k < 3; k++) grav[k] = (grav[k] - viesA[k]) * escA[k];
   gLocal = sqrt(grav[0] * grav[0] + grav[1] * grav[1] + grav[2] * grav[2]);
   digitalWrite(LED_VERMELHO, LOW);
   digitalWrite(LED_VERDE, HIGH);
@@ -156,26 +160,27 @@ void setup() {
   tAnterior = micros();
 }
 
-// Resolve o sistema 4×4 M·x = coluna 4 por eliminação de Gauss-Jordan com pivoteamento parcial
-bool resolve4(double M[4][5], double x[4]) {
-  for (int c = 0; c < 4; c++) {
+// Resolve o sistema 6×6 M·x = coluna 6 por eliminação de Gauss-Jordan com pivoteamento parcial
+bool resolve6(double M[6][7], double x[6]) {
+  for (int c = 0; c < 6; c++) {
     int p = c;
-    for (int r = c + 1; r < 4; r++) if (fabs(M[r][c]) > fabs(M[p][c])) p = r;
-    if (fabs(M[p][c]) < 1e-9) return false;
-    for (int k = 0; k < 5; k++) { double t = M[c][k]; M[c][k] = M[p][k]; M[p][k] = t; }
-    for (int r = 0; r < 4; r++) {
+    for (int r = c + 1; r < 6; r++) if (fabs(M[r][c]) > fabs(M[p][c])) p = r;
+    if (fabs(M[p][c]) < 1e-12) return false;
+    for (int k = 0; k < 7; k++) { double t = M[c][k]; M[c][k] = M[p][k]; M[p][k] = t; }
+    for (int r = 0; r < 6; r++) {
       if (r == c) continue;
       double f = M[r][c] / M[c][c];
-      for (int k = c; k < 5; k++) M[r][k] -= f * M[c][k];
+      for (int k = c; k < 7; k++) M[r][k] -= f * M[c][k];
     }
   }
-  for (int i = 0; i < 4; i++) x[i] = M[i][4] / M[i][i];
+  for (int i = 0; i < 6; i++) x[i] = M[i][6] / M[i][i];
   return true;
 }
 
-// Ajuste de esfera: em repouso |a − b| = g para toda pose. Expandindo, |a|² = 2a·b + c, com c = g² − |b|²,
-// que é linear em (b, c) → mínimos quadrados pelas equações normais (AᵀA)x = Aᵀy
-void ajustaEsfera() {
+// Ajuste de elipsoide: em repouso, a leitura a fica sobre um elipsoide alinhado aos eixos (viés b e escala por
+// eixo): A·ax² + B·ay² + C·az² + D·ax + E·ay + F·az = 1. É linear em (A…F) → mínimos quadrados pelas equações
+// normais. Completando quadrados: b = −D/2A (idem y, z) e escala kᵢ = G·√(coefᵢ / R), R = 1 + A·bx² + B·by² + C·bz²
+void ajustaElipsoide() {
   // As poses precisam cobrir direções variadas: det(Σ u·uᵀ / n) ≈ 0,037 com as 6 faces, ≈ 0 num cone estreito
   double S[3][3] = {{0}};
   for (int i = 0; i < nPoses; i++) {
@@ -186,29 +191,39 @@ void ajustaEsfera() {
              + S[0][2] * (S[1][0] * S[2][1] - S[1][1] * S[2][0]);
   if (det < 0.004) return;
 
-  double M[4][5] = {{0}};
+  // As leituras são divididas por G para o sistema ficar bem condicionado (valores perto de 1)
+  double M[6][7] = {{0}};
   for (int i = 0; i < nPoses; i++) {
-    double linha[4] = {2 * poses[i][0], 2 * poses[i][1], 2 * poses[i][2], 1};
-    double y = poses[i][0] * poses[i][0] + poses[i][1] * poses[i][1] + poses[i][2] * poses[i][2];
-    for (int r = 0; r < 4; r++) { for (int c = 0; c < 4; c++) M[r][c] += linha[r] * linha[c]; M[r][4] += linha[r] * y; }
+    double x = poses[i][0] / G, y = poses[i][1] / G, z = poses[i][2] / G;
+    double linha[6] = {x * x, y * y, z * z, x, y, z};
+    for (int r = 0; r < 6; r++) { for (int c = 0; c < 6; c++) M[r][c] += linha[r] * linha[c]; M[r][6] += linha[r]; }
   }
-  double x[4];
-  if (!resolve4(M, x)) return;
-  double b2 = x[0] * x[0] + x[1] * x[1] + x[2] * x[2], g = sqrt(x[3] + b2);
-  if (sqrt(b2) > 1.5 || !(g > 9.0 && g < 10.6)) return;   // resultado sem sentido físico: ignora
+  double q[6];
+  if (!resolve6(M, q)) return;
+  if (q[0] <= 0 || q[1] <= 0 || q[2] <= 0) return;
+  double b[3], R = 1, k[3];
+  for (int i = 0; i < 3; i++) { b[i] = -q[3 + i] / (2 * q[i]); R += q[i] * b[i] * b[i]; }
+  if (R <= 0) return;
+  for (int i = 0; i < 3; i++) {
+    k[i] = sqrt(q[i] / R);                               // escala sobre as leituras em unidades de G
+    b[i] *= G;                                           // volta o viés para m/s²
+    if (fabs(b[i]) > 1.5 || k[i] < 0.9 || k[i] > 1.1) return;   // resultado sem sentido físico: ignora
+  }
 
-  for (int k = 0; k < 3; k++) viesA[k] = x[k];
-  gLocal = g; viesZ = 0; calibrado = true;
+  for (int i = 0; i < 3; i++) { viesA[i] = b[i]; escA[i] = k[i]; }
+  gLocal = G; viesZ = 0; calibrado = true;
   float n = 0;                                           // reinicia a gravidade pela pose mais recente
   int ult = (proxPose + MAX_POSES - 1) % MAX_POSES;
-  for (int k = 0; k < 3; k++) { grav[k] = poses[ult][k] - viesA[k]; n += grav[k] * grav[k]; }
+  for (int i = 0; i < 3; i++) { grav[i] = (poses[ult][i] - viesA[i]) * escA[i]; n += grav[i] * grav[i]; }
   n = sqrt(n);
-  for (int k = 0; k < 3; k++) grav[k] *= gLocal / n;
+  for (int i = 0; i < 3; i++) grav[i] *= gLocal / n;
   memoria.putFloat("bx", viesA[0]); memoria.putFloat("by", viesA[1]); memoria.putFloat("bz", viesA[2]);
-  memoria.putBool("cal", true);
+  memoria.putFloat("kx", escA[0]); memoria.putFloat("ky", escA[1]); memoria.putFloat("kz", escA[2]);
+  memoria.putBool("cal2", true);
   digitalWrite(LED_VERDE, HIGH);
-  char msg[80];
-  snprintf(msg, sizeof(msg), "#CALIBRADO vies=%.3f,%.3f,%.3f g=%.3f", viesA[0], viesA[1], viesA[2], gLocal);
+  char msg[96];
+  snprintf(msg, sizeof(msg), "#CALIBRADO vies=%.3f,%.3f,%.3f escala=%.4f,%.4f,%.4f",
+           viesA[0], viesA[1], viesA[2], escA[0], escA[1], escA[2]);
   avisa(msg);
 }
 
@@ -225,12 +240,13 @@ void fechaPose() {
   proxPose = (proxPose + 1) % MAX_POSES;
   if (nPoses < MAX_POSES) nPoses++;
   if (!calibrado) { char msg[40]; snprintf(msg, sizeof(msg), "#CALIBRANDO %d/%d", min(nPoses, MIN_POSES), MIN_POSES); avisa(msg); }
-  if (nPoses >= MIN_POSES) ajustaEsfera();
+  if (nPoses >= MIN_POSES) ajustaElipsoide();
 }
 
 // Altura vertical: integração dupla da aceleração na direção da gravidade, com correções de deriva
 void estimaAltura(const float aBruta[3], const float w[3], float dt) {
-  float a[3] = {aBruta[0] - viesA[0], aBruta[1] - viesA[1], aBruta[2] - viesA[2]};   // sem o viés de fábrica
+  float a[3];                                            // sem os erros de fábrica (viés e escala)
+  for (int i = 0; i < 3; i++) a[i] = (aBruta[i] - viesA[i]) * escA[i];
 
   // 1. Gira a gravidade com o giroscópio (vetor fixo no mundo visto do sensor: dg/dt = −ω × g)
   float c0 = w[1] * grav[2] - w[2] * grav[1];
@@ -260,16 +276,21 @@ void estimaAltura(const float aBruta[3], const float w[3], float dt) {
   }
   mA /= JANELA;
   float modW = sqrt(mW[0] * mW[0] + mW[1] * mW[1] + mW[2] * mW[2]) / JANELA * RAD_TO_DEG;
-  bool quieto = fabs(mA) < REPOUSO_ACEL && modW < REPOUSO_GIRO;
+  float h = parado ? HISTERESE : 1;                      // já parado: precisa de mais movimento para sair
+  bool quieto = fabs(mA) < REPOUSO_ACEL * h && modW < REPOUSO_GIRO * h;
 
   // Repouso firme: sem rotação e |a| constante. Não depende do valor de g, então continua funcionando quando
   // o chip esquenta e o g medido ao ligar fica desatualizado
   bool firme = modW < FIRME_GIRO && mMax - mMin < FIRME_ACEL;
   nFirme = firme ? nFirme + 1 : 0;
-  if (nFirme >= FIRME_MIN && parado) {
-    // O aquecimento muda devagar o g medido e o desvio do giroscópio: num repouso firme, acompanha os dois
-    gLocal += APRENDE * (bufA[(iJanela + JANELA - 1) % JANELA]);   // |a sem viés| − g da leitura atual → 0
-    for (int i = 0; i < 3; i++) offGiro[i] += APRENDE * w[i] * RAD_TO_DEG;   // parado, ω deveria ser 0
+  // O aquecimento muda devagar o desvio do giroscópio e o g medido. Num repouso firme de 1,5 s:
+  //  - desvio do giroscópio: sempre (parado, ω deveria ser 0)
+  //  - g: só se o repouso já foi reconhecido, ou após 5 s firme (g tão desatualizado que o repouso nem é
+  //    reconhecido). Aprender g em qualquer 1,5 s firme atrapalhava os movimentos lentos
+  if (nFirme >= FIRME_MIN) {
+    for (int i = 0; i < 3; i++) offGiro[i] += APRENDE * w[i] * RAD_TO_DEG;
+    if (parado || nFirme >= 5 * FIRME_MIN / 1.5)
+      gLocal += APRENDE * (bufA[(iJanela + JANELA - 1) % JANELA]);   // |a corrigida| − g da leitura atual → 0
   }
 
   // Repouso firme: junta leituras brutas para a calibração do viés
