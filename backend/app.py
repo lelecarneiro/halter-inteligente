@@ -56,7 +56,7 @@ def publicar(evento, dado):
 
 
 def receber(_, dados: bytearray):
-    """Chamada a cada pacote BLE do ESP32: 't_ms,theta,ax,ay,az,z_cm,parado' (firmware antigo: só os 5 primeiros)."""
+    """Chamada a cada pacote BLE do ESP32: 't_ms,theta,ax,ay,az' (memorial 5.4 e 5.4.3)."""
     linha = dados.decode(errors='ignore').strip()
     if not linha:
         return
@@ -658,7 +658,7 @@ def criar_sessao():
     if gravacao:
         gravacao.close()
     gravacao = open(BRUTOS / f'sessao_{sid}.csv', 'w', buffering=1)
-    gravacao.write('t_ms,theta,ax,ay,az,z_cm,parado\n')
+    gravacao.write('t_ms,theta,ax,ay,az\n')
     gravacao_sid, gravacao_simulada = sid, False
     jogo = (f"/game/?sessao={sid}&cadencia={cfg['cadencia_alvo']:g}&min={cfg['amp_min']:g}&max={cfg['amp_max']:g}"
             f"&duracao={cfg['duracao_min']:g}&reps={cfg['reps_alvo'] or ''}&series={cfg['series_alvo']}&ordem={cfg['ordem']}")

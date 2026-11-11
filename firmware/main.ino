@@ -1,22 +1,17 @@
 /*
  * Halter Inteligente — firmware ESP32 + MPU-6050
- * Lê o IMU a 100 Hz, estima o ângulo θ e a altura vertical z do haltere e transmite a 50 Hz por BLE
- * (e Serial, para depuração).
- * Pacote CSV: t_ms,theta_graus,ax,ay,az,z_cm,parado
- *   ax, ay, az = aceleração linear em m/s² · z_cm = altura relativa (cm, positivo para cima)
- *   parado = 1 quando o haltere está em repouso (o jogo usa para corrigir a deriva da altura)
- *
- * A altura só pode mudar com o movimento VERTICAL. Girar o haltere não deve mexer nela, mas o acelerômetro
- * tem erros de fábrica (viés de até ~0,8 m/s² e escala de até ±3 % por eixo) que, ao girar, viram uma falsa
- * aceleração vertical. Por isso o firmware aprende esses erros sozinho (ajuste de elipsoide por mínimos
- * quadrados) e os guarda na memória:
- * na PRIMEIRA vez, com o LED verde piscando, deixe o haltere parado ~1 s com cada uma das 6 faces para cima.
- * Quando o LED verde ficar aceso direto, está calibrado. Para refazer, envie R pelo Monitor Serial.
+ * Segue o memorial de cálculo, seções 5.1 a 5.4.3:
+ *   5.1  lê o IMU a 100 Hz (Δt = 0,01 s) e transmite a 50 Hz (Δt = 0,02 s) por BLE (e Serial, para depuração)
+ *   5.2  calibração do giroscópio (média de 500 amostras) e conversão para unidades físicas
+ *   5.4  ângulo θ: extrapolação linear (Taylor de 1ª ordem) corrigida por gradiente descendente
+ *   5.4.3 subtração da gravidade → aceleração linear
+ *   5.7  filtro digital do sensor que mantém tremores até 12 Hz
+ * Pacote CSV: t_ms,theta_graus,ax,ay,az   (aceleração linear em m/s²)
+ * Velocidade e posição (5.5, trapézios) são calculadas no computador, para poupar a ESP32.
  */
 #include <Wire.h>
 #include <BLEDevice.h>
 #include <BLE2902.h>
-#include <Preferences.h>
 
 // ---------- Pinos e constantes ----------
 #define MPU 0x68
@@ -25,27 +20,7 @@
 const float ESC_ACEL = 8192.0;  // LSB/g  (faixa ±4 g)
 const float ESC_GIRO = 65.5;    // LSB/(°/s) (faixa ±500 °/s)
 const float G = 9.81;
-const float BETA = 0.1;         // passo da descida do gradiente
-
-// ---------- Altura: detecção de repouso (valores testados em simulação; ajuste com o haltere real) ----------
-const int   JANELA = 17;             // média móvel de 0,17 s (≈ 1 ciclo de tremor de 6 Hz, que assim se cancela)
-const float REPOUSO_ACEL = 0.05;     // m/s²  — média de (|a| − g) abaixo disso: sem aceleração linear
-const float HISTERESE = 2.0;         // parado, só sai do repouso com o dobro dos limites (evita piscar parado/movendo)
-const float APRENDE = 0.005;         // em repouso firme, quanto g e o desvio do giroscópio se ajustam por leitura
-const int   FIRME_MIN = 150;         // repouso firme por 1,5 s antes de aprender (não aprende nas pausas curtas entre repetições)
-const float REPOUSO_GIRO = 5.0;      // °/s   — média da rotação abaixo disso
-const float REPOUSO_VEL  = 0.10;     // m/s   — velocidade estimada abaixo disso
-const int   REPOUSO_CURTO = 10;      // 0,1 s quieto e com velocidade baixa → parado
-const int   REPOUSO_LONGO = 150;     // 1,5 s quieto → parado, qualquer que seja a velocidade estimada
-const float MOV_MAX = 3.0;           // s sem repouso: a partir daí a velocidade é amortecida (limita a deriva)
-const float TAU_FUGA = 2.0;          // s — constante de tempo desse amortecimento
-
-// ---------- Calibração do viés do acelerômetro ----------
-const int   MAX_POSES = 12;          // poses de repouso guardadas para o ajuste
-const int   MIN_POSES = 6;           // mínimo para ajustar (ex.: as 6 faces)
-const float POSE_DIST = 0.906;       // cos 25°: poses mais próximas que isso contam como a mesma
-const float FIRME_GIRO = 3.0;        // °/s  — repouso firme: quase sem rotação...
-const float FIRME_ACEL = 0.25;       // m/s² — ...e |a| quase constante na janela (não depende do viés)
+const float BETA = 0.1;         // α: passo do gradiente descendente (5.4.2)
 
 // ---------- BLE (serviço UART da Nordic) ----------
 BLECharacteristic *tx;
@@ -56,42 +31,18 @@ struct Callbacks : BLEServerCallbacks {
 };
 
 // ---------- Estado ----------
-float offGiro[3] = {0, 0, 0}, theta = 0;
-float grav[3];                 // direção da gravidade no referencial do sensor (m/s²)
-float gLocal = G;              // módulo da gravidade medido (ajustado em repouso, acompanha o aquecimento)
-float vz = 0, z = 0;           // velocidade (m/s) e altura (m) verticais
-float viesZ = 0;               // viés da aceleração vertical, aprendido em repouso
-float tMov = 0;                // tempo desde o último repouso (s)
-int nQuieto = 0, iJanela = 0, nFirme = 0;
-float bufA[JANELA], bufM[JANELA], bufW[JANELA][3];   // janelas da média móvel (zeradas: variáveis globais)
-Preferences memoria;
-bool calibrado = false;
-float viesA[3] = {0, 0, 0};    // viés do acelerômetro (m/s², eixos do sensor)
-float escA[3] = {1, 1, 1};     // correção de escala do acelerômetro por eixo
-float poses[MAX_POSES][3];     // média de |a| bruta em cada pose de repouso
-int nPoses = 0, proxPose = 0;
-float somaPose[3] = {0, 0, 0};
-int nPose = 0;
-bool parado = true;
+float offsetGx = 0, theta = 0, wAnterior = 0;
 unsigned long tAnterior;
 int contador = 0;
-
-// Mensagem de estado ('#...'): vai pela Serial e, se conectado, pelo Bluetooth (o jogo mostra na tela)
-void avisa(const char *msg) {
-  Serial.println(msg);
-  if (conectado) { tx->setValue((uint8_t *)msg, strlen(msg)); tx->notify(); }
-}
 
 // ---------- Funções auxiliares de I2C ----------
 void escreve(byte reg, byte val) {
   Wire.beginTransmission(MPU); Wire.write(reg); Wire.write(val); Wire.endTransmission();
 }
-bool le(byte reg, int n, int16_t *dest) {  // lê n palavras de 16 bits a partir de reg; false se a leitura falhou
-  Wire.beginTransmission(MPU); Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) return false;
-  if (Wire.requestFrom(MPU, n * 2) != n * 2) return false;
+void le(byte reg, int n, int16_t *dest) {  // lê n palavras de 16 bits a partir de reg
+  Wire.beginTransmission(MPU); Wire.write(reg); Wire.endTransmission(false);
+  Wire.requestFrom(MPU, n * 2);
   for (int i = 0; i < n; i++) { int alto = Wire.read(); dest[i] = (alto << 8) | Wire.read(); }
-  return true;
 }
 bool sensorConectado() {
   Wire.beginTransmission(MPU); Wire.write(0x75); Wire.endTransmission(false);
@@ -114,37 +65,19 @@ void setup() {
     delay(500);
   }
   escreve(0x6B, 0x00);  // acorda o MPU
-  escreve(0x1A, 0x03);  // filtro passa-baixa ~42 Hz
+  escreve(0x1A, 0x04);  // 5.7 filtro passa-baixa digital ~21 Hz: mantém os tremores (3–12 Hz) e tira ruído
   escreve(0x1B, 0x08);  // giroscópio ±500 °/s
   escreve(0x1C, 0x08);  // acelerômetro ±4 g
 
-  // 3. Viés do acelerômetro salvo numa calibração anterior?
-  memoria.begin("halter", false);
-  if (memoria.getBool("cal2", false)) {          // "cal2": viés + escala (a calibração antiga, só viés, é refeita)
-    viesA[0] = memoria.getFloat("bx"); viesA[1] = memoria.getFloat("by"); viesA[2] = memoria.getFloat("bz");
-    escA[0] = memoria.getFloat("kx", 1); escA[1] = memoria.getFloat("ky", 1); escA[2] = memoria.getFloat("kz", 1);
-    calibrado = true;
-  }
-
-  // 4. Calibração: média de 500 amostras em repouso (LED vermelho aceso)
-  //    giroscópio → offsets dos 3 eixos · acelerômetro → direção e módulo da gravidade
+  // 3. 5.2 Calibração: E_médio = (1/500)·Σ leitura parado, com o haltere em repouso (LED vermelho aceso)
   digitalWrite(LED_VERMELHO, HIGH);
-  float somaA[3] = {0, 0, 0};
-  int16_t r[7];
-  for (int i = 0; i < 500; i++) {
-    while (!le(0x3B, 7, r)) delay(2);
-    for (int k = 0; k < 3; k++) { somaA[k] += r[k] / ESC_ACEL * G; offGiro[k] += r[4 + k] / ESC_GIRO; }
-    delay(2);
-  }
-  for (int k = 0; k < 3; k++) { offGiro[k] /= 500; grav[k] = somaA[k] / 500; }
-  theta = atan2(grav[1], grav[2]) * RAD_TO_DEG;
-  for (int k = 0; k < 3; k++) grav[k] = (grav[k] - viesA[k]) * escA[k];
-  gLocal = sqrt(grav[0] * grav[0] + grav[1] * grav[1] + grav[2] * grav[2]);
+  int16_t gx;
+  for (int i = 0; i < 500; i++) { le(0x43, 1, &gx); offsetGx += gx / ESC_GIRO; delay(2); }
+  offsetGx /= 500;
   digitalWrite(LED_VERMELHO, LOW);
   digitalWrite(LED_VERDE, HIGH);
-  Serial.println(calibrado ? "#CALIBRADO" : "#CALIBRAR: deixe o haltere parado ~1 s com cada face para cima");
 
-  // 5. BLE
+  // 4. BLE
   BLEDevice::init("Haltere");
   BLEDevice::setMTU(100);  // pacote inteiro em uma notificação (o padrão corta em 20 bytes)
   BLEServer *servidor = BLEDevice::createServer();
@@ -156,183 +89,11 @@ void setup() {
   BLEDevice::startAdvertising();
   Serial.println("#PRONTO");
 
-  // 6. Inicia temporizadores
+  // 5. Inicia temporizadores
   tAnterior = micros();
 }
 
-// Resolve o sistema 6×6 M·x = coluna 6 por eliminação de Gauss-Jordan com pivoteamento parcial
-bool resolve6(double M[6][7], double x[6]) {
-  for (int c = 0; c < 6; c++) {
-    int p = c;
-    for (int r = c + 1; r < 6; r++) if (fabs(M[r][c]) > fabs(M[p][c])) p = r;
-    if (fabs(M[p][c]) < 1e-12) return false;
-    for (int k = 0; k < 7; k++) { double t = M[c][k]; M[c][k] = M[p][k]; M[p][k] = t; }
-    for (int r = 0; r < 6; r++) {
-      if (r == c) continue;
-      double f = M[r][c] / M[c][c];
-      for (int k = c; k < 7; k++) M[r][k] -= f * M[c][k];
-    }
-  }
-  for (int i = 0; i < 6; i++) x[i] = M[i][6] / M[i][i];
-  return true;
-}
-
-// Ajuste de elipsoide: em repouso, a leitura a fica sobre um elipsoide alinhado aos eixos (viés b e escala por
-// eixo): A·ax² + B·ay² + C·az² + D·ax + E·ay + F·az = 1. É linear em (A…F) → mínimos quadrados pelas equações
-// normais. Completando quadrados: b = −D/2A (idem y, z) e escala kᵢ = G·√(coefᵢ / R), R = 1 + A·bx² + B·by² + C·bz²
-void ajustaElipsoide() {
-  // As poses precisam cobrir direções variadas: det(Σ u·uᵀ / n) ≈ 0,037 com as 6 faces, ≈ 0 num cone estreito
-  double S[3][3] = {{0}};
-  for (int i = 0; i < nPoses; i++) {
-    float n = sqrt(poses[i][0] * poses[i][0] + poses[i][1] * poses[i][1] + poses[i][2] * poses[i][2]);
-    for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++) S[r][c] += poses[i][r] / n * poses[i][c] / n / nPoses;
-  }
-  double det = S[0][0] * (S[1][1] * S[2][2] - S[1][2] * S[2][1]) - S[0][1] * (S[1][0] * S[2][2] - S[1][2] * S[2][0])
-             + S[0][2] * (S[1][0] * S[2][1] - S[1][1] * S[2][0]);
-  if (det < 0.004) return;
-
-  // As leituras são divididas por G para o sistema ficar bem condicionado (valores perto de 1)
-  double M[6][7] = {{0}};
-  for (int i = 0; i < nPoses; i++) {
-    double x = poses[i][0] / G, y = poses[i][1] / G, z = poses[i][2] / G;
-    double linha[6] = {x * x, y * y, z * z, x, y, z};
-    for (int r = 0; r < 6; r++) { for (int c = 0; c < 6; c++) M[r][c] += linha[r] * linha[c]; M[r][6] += linha[r]; }
-  }
-  double q[6];
-  if (!resolve6(M, q)) return;
-  if (q[0] <= 0 || q[1] <= 0 || q[2] <= 0) return;
-  double b[3], R = 1, k[3];
-  for (int i = 0; i < 3; i++) { b[i] = -q[3 + i] / (2 * q[i]); R += q[i] * b[i] * b[i]; }
-  if (R <= 0) return;
-  for (int i = 0; i < 3; i++) {
-    k[i] = sqrt(q[i] / R);                               // escala sobre as leituras em unidades de G
-    b[i] *= G;                                           // volta o viés para m/s²
-    if (fabs(b[i]) > 1.5 || k[i] < 0.9 || k[i] > 1.1) return;   // resultado sem sentido físico: ignora
-  }
-
-  for (int i = 0; i < 3; i++) { viesA[i] = b[i]; escA[i] = k[i]; }
-  gLocal = G; viesZ = 0; calibrado = true;
-  float n = 0;                                           // reinicia a gravidade pela pose mais recente
-  int ult = (proxPose + MAX_POSES - 1) % MAX_POSES;
-  for (int i = 0; i < 3; i++) { grav[i] = (poses[ult][i] - viesA[i]) * escA[i]; n += grav[i] * grav[i]; }
-  n = sqrt(n);
-  for (int i = 0; i < 3; i++) grav[i] *= gLocal / n;
-  memoria.putFloat("bx", viesA[0]); memoria.putFloat("by", viesA[1]); memoria.putFloat("bz", viesA[2]);
-  memoria.putFloat("kx", escA[0]); memoria.putFloat("ky", escA[1]); memoria.putFloat("kz", escA[2]);
-  memoria.putBool("cal2", true);
-  digitalWrite(LED_VERDE, HIGH);
-  char msg[96];
-  snprintf(msg, sizeof(msg), "#CALIBRADO vies=%.3f,%.3f,%.3f escala=%.4f,%.4f,%.4f",
-           viesA[0], viesA[1], viesA[2], escA[0], escA[1], escA[2]);
-  avisa(msg);
-}
-
-// Fecha uma pose de repouso (média das leituras brutas) e guarda se for uma direção nova
-void fechaPose() {
-  float m[3], n = 0;
-  for (int k = 0; k < 3; k++) { m[k] = somaPose[k] / nPose; n += m[k] * m[k]; somaPose[k] = 0; }
-  nPose = 0; n = sqrt(n);
-  for (int i = 0; i < nPoses; i++) {
-    float ni = sqrt(poses[i][0] * poses[i][0] + poses[i][1] * poses[i][1] + poses[i][2] * poses[i][2]);
-    if ((m[0] * poses[i][0] + m[1] * poses[i][1] + m[2] * poses[i][2]) / (n * ni) > POSE_DIST) return;
-  }
-  for (int k = 0; k < 3; k++) poses[proxPose][k] = m[k];
-  proxPose = (proxPose + 1) % MAX_POSES;
-  if (nPoses < MAX_POSES) nPoses++;
-  if (!calibrado) { char msg[40]; snprintf(msg, sizeof(msg), "#CALIBRANDO %d/%d", min(nPoses, MIN_POSES), MIN_POSES); avisa(msg); }
-  if (nPoses >= MIN_POSES) ajustaElipsoide();
-}
-
-// Altura vertical: integração dupla da aceleração na direção da gravidade, com correções de deriva
-void estimaAltura(const float aBruta[3], const float w[3], float dt) {
-  float a[3];                                            // sem os erros de fábrica (viés e escala)
-  for (int i = 0; i < 3; i++) a[i] = (aBruta[i] - viesA[i]) * escA[i];
-
-  // 1. Gira a gravidade com o giroscópio (vetor fixo no mundo visto do sensor: dg/dt = −ω × g)
-  float c0 = w[1] * grav[2] - w[2] * grav[1];
-  float c1 = w[2] * grav[0] - w[0] * grav[2];
-  float c2 = w[0] * grav[1] - w[1] * grav[0];
-  grav[0] -= c0 * dt; grav[1] -= c1 * dt; grav[2] -= c2 * dt;
-  // 2. Corrige devagar rumo ao acelerômetro (rápido em repouso, quase nada em movimento)
-  float k = parado ? 0.02 : 0.0005;
-  float n = 0;
-  for (int i = 0; i < 3; i++) { grav[i] += k * (a[i] - grav[i]); n += grav[i] * grav[i]; }
-  n = sqrt(n);
-  for (int i = 0; i < 3; i++) grav[i] *= gLocal / n;
-
-  // 3. Aceleração vertical = projeção de a na direção "para cima" − g − viés
-  float aVert = (a[0] * grav[0] + a[1] * grav[1] + a[2] * grav[2]) / gLocal - gLocal - viesZ;
-
-  // 4. Detecção de repouso (ZUPT): sem aceleração linear e sem rotação por um tempo.
-  //    Usa médias móveis com sinal: o tremor oscila em torno de zero e se cancela, o movimento real não
-  bufA[iJanela] = sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) - gLocal;
-  bufM[iJanela] = sqrt(aBruta[0] * aBruta[0] + aBruta[1] * aBruta[1] + aBruta[2] * aBruta[2]);
-  for (int i = 0; i < 3; i++) bufW[iJanela][i] = w[i];
-  iJanela = (iJanela + 1) % JANELA;
-  float mA = 0, mW[3] = {0, 0, 0}, mMin = 1e9, mMax = 0;
-  for (int j = 0; j < JANELA; j++) {
-    mA += bufA[j]; for (int i = 0; i < 3; i++) mW[i] += bufW[j][i];
-    mMin = min(mMin, bufM[j]); mMax = max(mMax, bufM[j]);
-  }
-  mA /= JANELA;
-  float modW = sqrt(mW[0] * mW[0] + mW[1] * mW[1] + mW[2] * mW[2]) / JANELA * RAD_TO_DEG;
-  float h = parado ? HISTERESE : 1;                      // já parado: precisa de mais movimento para sair
-  bool quieto = fabs(mA) < REPOUSO_ACEL * h && modW < REPOUSO_GIRO * h;
-
-  // Repouso firme: sem rotação e |a| constante. Não depende do valor de g, então continua funcionando quando
-  // o chip esquenta e o g medido ao ligar fica desatualizado
-  bool firme = modW < FIRME_GIRO && mMax - mMin < FIRME_ACEL;
-  nFirme = firme ? nFirme + 1 : 0;
-  // O aquecimento muda devagar o desvio do giroscópio e o g medido. Num repouso firme de 1,5 s:
-  //  - desvio do giroscópio: sempre (parado, ω deveria ser 0)
-  //  - g: só se o repouso já foi reconhecido, ou após 5 s firme (g tão desatualizado que o repouso nem é
-  //    reconhecido). Aprender g em qualquer 1,5 s firme atrapalhava os movimentos lentos
-  if (nFirme >= FIRME_MIN) {
-    for (int i = 0; i < 3; i++) offGiro[i] += APRENDE * w[i] * RAD_TO_DEG;
-    if (parado || nFirme >= 5 * FIRME_MIN / 1.5)
-      gLocal += APRENDE * (bufA[(iJanela + JANELA - 1) % JANELA]);   // |a corrigida| − g da leitura atual → 0
-  }
-
-  // Repouso firme: junta leituras brutas para a calibração do viés
-  if (firme) {
-    for (int k = 0; k < 3; k++) somaPose[k] += aBruta[k];
-    if (++nPose == 100) fechaPose();                    // 1 s parado → uma pose
-  } else {
-    if (nPose >= 30) fechaPose();                        // parou pelo menos 0,3 s
-    for (int k = 0; k < 3; k++) somaPose[k] = 0;
-    nPose = 0;
-  }
-  nQuieto = quieto ? nQuieto + 1 : 0;
-  // a velocidade alta evita confundir o meio de um movimento lento (aceleração ≈ 0) com repouso
-  bool agoraParado = (nQuieto >= REPOUSO_CURTO && fabs(vz) < REPOUSO_VEL) || nQuieto >= REPOUSO_LONGO;
-
-  if (agoraParado) {
-    // Ao parar, a velocidade deveria ser 0. Supondo que o erro cresceu linearmente durante o movimento,
-    // o erro acumulado na altura é vz·tMov/2 → desconta de uma vez
-    // (só vale para movimentos curtos: depois de MOV_MAX a velocidade já foi amortecida e a hipótese não vale)
-    if (!parado && tMov <= MOV_MAX) z -= vz * tMov / 2;
-    vz = 0; tMov = 0;
-    viesZ += 0.01 * aVert;               // em repouso aVert deveria ser 0: o que sobra é viés
-  } else {
-    // 5. Integração (Euler): v ← v + a·Δt ; z ← z + v·Δt
-    vz += aVert * dt;
-    if (tMov > MOV_MAX) vz -= vz * dt / TAU_FUGA;   // repouso não detectado há muito tempo: evita a deriva sem limite
-    z += vz * dt;
-    tMov += dt;
-  }
-  parado = agoraParado;
-}
-
 void loop() {
-  // Comando pelo Monitor Serial: R apaga a calibração do viés e reinicia
-  if (Serial.available() && toupper(Serial.read()) == 'R') { memoria.clear(); ESP.restart(); }
-  if (!calibrado) digitalWrite(LED_VERDE, (millis() / 250) % 2);   // pisca enquanto não calibrou
-  static unsigned long ultimoAviso = 0;                              // lembra o jogo a cada 2 s
-  if (!calibrado && millis() - ultimoAviso > 2000) {
-    ultimoAviso = millis();
-    char msg[40]; snprintf(msg, sizeof(msg), "#CALIBRANDO %d/%d", min(nPoses, MIN_POSES), MIN_POSES); avisa(msg);
-  }
-
   unsigned long agora = micros();
   if (agora - tAnterior < 10000) return;  // 100 Hz
   float dt = (agora - tAnterior) / 1e6;
@@ -340,25 +101,21 @@ void loop() {
 
   // Lê acelerômetro, temperatura (ignorada) e giroscópio de uma vez
   int16_t r[7];
-  if (!le(0x3B, 7, r)) return;                          // leitura I2C falhou: descarta
-  if (r[0] == -1 && r[1] == -1 && r[2] == -1 && r[4] == -1) return;   // barramento devolveu só 0xFF: descarta
+  le(0x3B, 7, r);
 
-  // Corrige offset e converte unidades
-  float ax = r[0] / ESC_ACEL * G, ay = r[1] / ESC_ACEL * G, az = r[2] / ESC_ACEL * G;  // m/s²
-  float wx = r[4] / ESC_GIRO - offGiro[0];                                           // °/s
-  float wy = r[5] / ESC_GIRO - offGiro[1];
-  float wz = r[6] / ESC_GIRO - offGiro[2];
+  // 5.2 Conversão de unidades: a = (a_lida / 8192)·9,81 [m/s²] ; ω = (ω_lido / 65,5) − E_médio [°/s]
+  float ax = r[0] / ESC_ACEL * G, ay = r[1] / ESC_ACEL * G, az = r[2] / ESC_ACEL * G;
+  float wx = r[4] / ESC_GIRO - offsetGx;
 
-  // Altura vertical (usa a aceleração bruta, com gravidade, e os 3 eixos do giroscópio; só o movimento vertical conta)
-  float a[3] = {ax, ay, az}, w[3] = {(float)(wx * DEG_TO_RAD), (float)(wy * DEG_TO_RAD), (float)(wz * DEG_TO_RAD)};
-  estimaAltura(a, w, dt);
-
-  // Estima orientação: Euler (giroscópio) corrigido por descida do gradiente rumo ao acelerômetro
+  // 5.4 Extrapolação linear: θ_prev(t_k) = θ(t_k−1) + ω(t_k−1)·Δt
+  float thetaPrev = theta + wAnterior * dt;
+  wAnterior = wx;
+  // 5.4.1 Ângulo de referência pela gravidade: θ_aceleração = arctan(a_y / a_z)
   float thetaAcel = atan2(ay, az) * RAD_TO_DEG;
-  float thetaEuler = theta + wx * dt;
-  theta = thetaEuler - BETA * (thetaEuler - thetaAcel);
+  // 5.4.2 Gradiente descendente sobre E(θ) = ½(θ − θ_aceleração)²: θ(t_k) = θ_prev − α·(θ_prev − θ_aceleração)
+  theta = thetaPrev - BETA * (thetaPrev - thetaAcel);
 
-  // Remove a gravidade dos eixos Y e Z
+  // 5.4.3 Subtração da gravidade: a_lin,y = a_y − 9,81·sen θ ; a_lin,z = a_z − 9,81·cos θ
   float th = theta * DEG_TO_RAD;
   ay -= G * sin(th);
   az -= G * cos(th);
@@ -366,9 +123,8 @@ void loop() {
   // A cada 2 leituras (20 ms → 50 Hz) monta e transmite o pacote
   if (++contador < 2) return;
   contador = 0;
-  char pacote[96];
-  snprintf(pacote, sizeof(pacote), "%lu,%.2f,%.3f,%.3f,%.3f,%.1f,%d",
-           millis(), theta, ax, ay, az, z * 100, parado ? 1 : 0);
+  char pacote[64];
+  snprintf(pacote, sizeof(pacote), "%lu,%.2f,%.3f,%.3f,%.3f", millis(), theta, ax, ay, az);
   Serial.println(pacote);
   if (conectado) { tx->setValue((uint8_t *)pacote, strlen(pacote)); tx->notify(); }
 }

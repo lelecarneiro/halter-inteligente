@@ -117,10 +117,10 @@
       <button id="btZerar" title="Considera a altura atual como a posição baixa">zerar</button></p>
     <label class="amp"><span>Posição baixa</span><input id="altMin" type="number" step="1"><span class="un">cm</span><button data-usar="min">atual</button></label>
     <label class="amp"><span>Posição alta</span><input id="altMax" type="number" step="1"><span class="un">cm</span><button data-usar="max">atual</button></label>
-    <p class="sub">O pássaro sobe e desce junto com o haltere: só conta o movimento vertical, girar o haltere não move o pássaro.
+    <p class="sub">O pássaro sobe e desce junto com o haltere. A altura é a integral dupla (trapézios) da aceleração
+      vertical e acumula erro com o tempo: toque em “zerar” com o haltere parado na posição baixa para recomeçar.
       Cada braço guarda a sua amplitude: peça ao paciente para ir até cada posição e toque em “atual”.
-      A série começa com o haltere parado na posição baixa; uma pausa curta em cima e embaixo deixa a altura mais precisa.</p>
-    <p class="sub" id="alturaAviso" style="color:var(--aviso)"></p>
+      A série começa com o haltere parado na posição baixa.</p>
   </section>
 
   <section>
@@ -166,79 +166,69 @@ let estado = 'aguardando';                  // aguardando | jogando | intervalo 
 let etapa = 0, serieId = null, resultados = [];
 let fonte = null, ultimoPacote = 0;         // 'haltere' | 'sim'
 let janela = [], theta = 0, vel = 0, tAnt = null;
-let avisouSemAltura = false, temAltura = false, altura = 0, velAlt = 0, zOffset = 0, parado = false, repMinAlt = 0;
+let temAltura = false, altura = 0, velAlt = 0, zOffset = 0;
+let aVertAnt = null, vVert = 0, pVert = 0, janelaP = [];   // integração da altura (memorial 5.5 e 5.7)
 let fase = 'baixo', tUltimaRep = null, repMin = 0, repMax = 0, velPico = 0, reps = [];
 let canos = [], proxCano = 0, proxTipo = 'alto', pontos = 0, passados = 0, totalCanos = 0, tJogo = 0, pulso = 0;
 let W = 0, H = 0;
 const atual = () => plano[Math.min(etapa, plano.length - 1)];
 
 // ===================== DADOS DO HALTERE =====================
-// Pacote: t_ms,theta,ax,ay,az,z_cm,parado — o pássaro, os canos e a contagem de repetições usam só a altura z.
-// θ é guardado apenas para os registros enviados à plataforma (amplitude e velocidade de cada repetição).
-// (firmware antigo, sem z: o jogo continua funcionando pelo ângulo)
+// Pacote: t_ms,theta,ax,ay,az (memorial 5.4 e 5.4.3: ângulo θ e aceleração linear, sem a gravidade).
+// A velocidade e a posição são calculadas aqui no computador (memorial 5.5), não na ESP32.
 function receber(linha) {
   if (linha.startsWith('#')) return;                       // mensagens de status
-  const [t, th, , , , z, par] = linha.split(',').map(Number);
-  if (!isFinite(t) || !isFinite(th)) return;               // dado inválido
+  const [t, th, ax, ay, az] = linha.split(',').map(Number);
+  if (![t, th, ax, ay, az].every(isFinite)) return;        // dado inválido
   ultimoPacote = performance.now();
-  processar(t / 1000, th, isFinite(z) ? z : null, par === 1);
+  processar(t / 1000, th, ay, az);
 }
 
-function processar(t, th, z, quieto) {
-  const dt = tAnt !== null && t > tAnt ? t - tAnt : 0;
-  // Filtro: média móvel das últimas K = 10 amostras (memorial 5.7) — reduz o efeito do tremor no jogo
+function processar(t, th, ay, az) {
+  const dt = tAnt !== null && t > tAnt ? t - tAnt : 0;     // Δt entre pontos (0,02 s a 50 Hz)
+  // 5.7 Média móvel das últimas K = 10 amostras de θ
   janela.push(th); if (janela.length > 10) janela.shift();
   const novo = janela.reduce((a, b) => a + b) / janela.length;
   // Velocidade angular por diferenças finitas: (θᵢ − θᵢ₋₁) / Δt
   if (dt) vel = (novo - theta) / dt;
   theta = novo;
-  if (z !== null) {
-    // A altura do firmware é relativa e deriva devagar: o jogo soma um deslocamento (zOffset) e o corrige
-    if (!temAltura) { temAltura = true; zOffset = cfg.altMin - z; $('alturaAviso').textContent = ''; }  // começa na posição baixa
-    parado = quieto;
-    if (estado === 'jogando' && quieto) ancorar(z + zOffset, 0.1, 0.25);
-    const nova = z + zOffset;
-    if (dt) velAlt = (nova - altura) / dt;
-    altura = nova;
-  } else if (!avisouSemAltura) {
-    avisouSemAltura = true;
-    $('alturaAviso').textContent = '⚠️ O haltere não está enviando a altura: grave o firmware novo (firmware/main.ino).';
+
+  // Componente vertical da aceleração linear. Em 5.4.3 a gravidade foi decomposta em y e z pelo ângulo θ
+  // (g·sen θ em y, g·cos θ em z); a direção vertical é a mesma: a_vert = a_lin,y·sen θ + a_lin,z·cos θ
+  const r = th * Math.PI / 180, aVert = ay * Math.sin(r) + az * Math.cos(r);
+  // 5.5 Método dos trapézios:
+  //   v(t_k) = v(t_k−1) + (Δt/2)·[a(t_k−1) + a(t_k)]      p(t_k) = p(t_k−1) + (Δt/2)·[v(t_k−1) + v(t_k)]
+  if (dt && aVertAnt !== null) {
+    const vNovo = vVert + dt / 2 * (aVertAnt + aVert);
+    pVert += dt / 2 * (vVert + vNovo);
+    vVert = vNovo;
   }
+  aVertAnt = aVert;
+  // 5.7 Curva do jogo: média móvel das últimas K = 10 posições (alisa a curva e diminui o efeito do tremor)
+  janelaP.push(pVert * 100); if (janelaP.length > 10) janelaP.shift();     // cm
+  const pMedia = janelaP.reduce((a, b) => a + b) / janelaP.length;
+  if (!temAltura) { temAltura = true; zOffset = cfg.altMin - pMedia; }     // começa na posição baixa
+  const nova = pMedia + zOffset;
+  if (dt) velAlt = (nova - altura) / dt;
+  altura = nova;
+
   tAnt = t;
   if (estado === 'jogando') detectarRepeticao(t);
 }
 
-// Correção de deriva: a posição baixa é a de repouso, sempre a mesma. Quando a altura medida está perto dela
-// (dentro de 'tolerancia' × amplitude), puxa o deslocamento uma fração 'ganho' do erro em direção a ela.
-// A posição alta não é usada como âncora: o braço afetado pode não chegar lá, e isso precisa aparecer.
-function ancorar(h, ganho, tolerancia) {
-  const amp = Math.abs(cfg.altMax - cfg.altMin) || 1, erro = cfg.altMin - h;
-  if (Math.abs(erro) < tolerancia * amp) zOffset += ganho * erro;
+// Condição inicial da integração: haltere parado (v = 0) na posição baixa
+function zerarAltura() {
+  if (!temAltura) return;
+  vVert = 0; pVert = 0; janelaP = [];
+  zOffset = cfg.altMin; altura = cfg.altMin;
 }
-// Mensagens de estado do firmware: enquanto o acelerômetro não foi calibrado, a altura fica errada
-let haltereCalibrado = null;
-function avisoDoHaltere(msg) {
-  const m = msg.match(/^CALIBRANDO (\d+)\/(\d+)/);
-  if (m) {
-    haltereCalibrado = false;
-    $('alturaAviso').innerHTML = `⚠️ <b>Haltere não calibrado</b> (${m[1]}/${m[2]} posições): a altura fica errada e pode
-      mudar sozinha. Deixe o haltere parado ~1 s com cada uma das 6 faces para cima, até o LED verde ficar aceso.`;
-  } else if (msg.startsWith('CALIBRADO')) {
-    haltereCalibrado = true;
-    $('alturaAviso').textContent = '✅ Haltere calibrado.';
-    setTimeout(() => { if (haltereCalibrado) $('alturaAviso').textContent = ''; }, 4000);
-  }
-}
-function zerarAltura() { if (temAltura) { zOffset += cfg.altMin - altura; altura = cfg.altMin; } }
 
-// Progresso do movimento: 0 = posição baixa, 1 = posição alta. Depende SÓ da altura (movimento vertical);
-// o ângulo θ não entra no jogo
+// Progresso do movimento: 0 = posição baixa, 1 = posição alta. Depende só da altura (movimento vertical)
 const progresso = () => temAltura ? (altura - cfg.altMin) / ((cfg.altMax - cfg.altMin) || 1) : 0;
 const velProgresso = () => velAlt / ((cfg.altMax - cfg.altMin) || 1);   // progresso por segundo (inclina o pássaro)
 
 function detectarRepeticao(t) {
   repMin = Math.min(repMin, theta); repMax = Math.max(repMax, theta);
-  repMinAlt = Math.min(repMinAlt, altura);
   velPico = Math.max(velPico, Math.abs(vel));
   const p = progresso();
   if (fase === 'baixo' && p > 0.7) fase = 'alto';          // histerese: sobe acima de 70 %
@@ -263,10 +253,7 @@ function registrarRepeticao(t) {
   if (noRitmo === null) mostrarFeedback('Boa! Continue no ritmo', 'var(--acento)');
   else if (noRitmo) mostrarFeedback('No ritmo ✓', 'var(--ok)');
   else mostrarFeedback(dur < T ? 'Mais devagar' : 'Mais rápido', 'var(--aviso)');
-  // A cada repetição o haltere voltou à posição baixa: corrige 80 % da deriva medida no ponto mais baixo
-  // (funciona mesmo se o paciente não fizer pausa e o firmware nunca detectar repouso)
-  if (temAltura) ancorar(repMinAlt, 0.8, 0.4);
-  tUltimaRep = t; repMin = repMax = theta; repMinAlt = altura; velPico = 0;
+  tUltimaRep = t; repMin = repMax = theta; velPico = 0;
   if (cfg.reps && reps.length >= cfg.reps) encerrarSerie();  // atingiu as repetições da série
 }
 
@@ -279,12 +266,11 @@ function conectar() {
   stream = new EventSource('/api/stream');                      // reconecta sozinho se o backend cair
   stream.addEventListener('dado', e => { if (fonte === 'haltere') receber(e.data); });
   stream.addEventListener('status', e => { if (fonte === 'haltere') status('Haltere: ' + e.data); });
-  stream.addEventListener('aviso', e => { if (fonte === 'haltere') avisoDoHaltere(e.data); });
   stream.onerror = () => { if (fonte === 'haltere') status('⚠️ Backend fora do ar — tentando reconectar…'); };
 }
 
 // --- Modo simulado: um "paciente virtual" que segue a trilha dos canos ---
-// Gera o pacote completo (θ, aceleração linear e altura) como o ESP32; o jogo só usa a altura. O braço afetado é simulado com menos
+// Gera o mesmo pacote da ESP32 (θ e aceleração linear); o jogo calcula a altura a partir dele. O braço afetado é simulado com menos
 // amplitude, atraso, mais tremor e mais compensação lateral. Com sessão, os dados vão para o backend.
 const PERFIL = {
   saudavel: { ganho: 1.0, atraso: 0.08, tremor: 0.03, lateral: 0.03 },
@@ -293,37 +279,33 @@ const PERFIL = {
 let simTimer = null, brutos = [];
 function simular() {
   pararSimulacao(); fonte = 'sim'; status('🧪 Modo simulado');
-  let fs = 0, tAntSim = performance.now(), thSim = cfg.min, omegaF = 0, alfaF = 0, deriva = 0, sAnt = 0, quietoT = 0, zSim = cfg.altMin;
-  const R = 0.3;                                                   // raio do movimento (m)
+  let fs = 0, tAntSim = Math.round(performance.now()), thSim = cfg.min, zSim = 0, vSim = 0, aSim = 0;
   simTimer = setInterval(() => {
-    const agora = performance.now(), dt = Math.max(0.001, (agora - tAntSim) / 1000), perfil = PERFIL[atual().braco];
-    fs += 2 * Math.PI * dt / periodo(); tAntSim = agora;
+    const agora = Math.round(performance.now());                   // ms inteiros, como o millis() da ESP32
+    if (agora <= tAntSim) return;
+    const dt = (agora - tAntSim) / 1000, perfil = PERFIL[atual().braco];
+    fs = estado === 'jogando' ? fs + 2 * Math.PI * dt / periodo() : 0; tAntSim = agora;
     let alvo = estado === 'jogando' ? 0.5 - 0.5 * Math.cos(fs) : 0;  // fora do jogo: descansa na posição baixa
     const x = W * 0.25, prox = canos.find(c => c.x + LARG / 2 > x), ant = canos.findLast(c => c.x + LARG / 2 <= x);
     if (estado === 'jogando' && prox) {                             // no jogo: vai de um cano ao próximo
-      const p1 = prox.tipo === 'alto' ? 1 : 0, p0 = ant ? 1 - p1 : (thSim - cfg.min) / ((cfg.max - cfg.min) || 1);
+      const p1 = prox.tipo === 'alto' ? 1 : 0, p0 = ant ? 1 - p1 : zSim / (((cfg.altMax - cfg.altMin) / 100) || 1);
       const x0 = ant ? ant.x + LARG / 2 : 0, f = Math.min(1, Math.max(0, (x - x0) / (prox.x + LARG / 2 - x0)));
       alvo = p0 + (p1 - p0) * (0.5 - 0.5 * Math.cos(Math.PI * f));
     }
-    const thAnt = thSim;
-    thSim += (cfg.min + (cfg.max - cfg.min) * alvo * perfil.ganho - thSim) * Math.min(1, dt / perfil.atraso);
-    // velocidade e aceleração angulares suavizadas (a derivada direta de θ amplificaria o ruído)
-    const k = Math.min(1, dt / 0.1), omegaAnt = omegaF;
-    omegaF += ((thSim - thAnt) / dt * Math.PI / 180 - omegaF) * k;
-    alfaF += ((omegaF - omegaAnt) / dt - alfaF) * k;
-    const omega = omegaF, alfa = alfaF;
-    const trem = perfil.tremor * Math.sin(2 * Math.PI * 6 * agora / 1000), ruido = () => (Math.random() - 0.5) * 0.04;
-    const az = R * alfa + trem + ruido(), ay = R * omega * omega + 0.5 * trem + ruido();
-    const ax = perfil.lateral * R * alfa + ruido();
-    // altura: mesma fração do movimento que o ângulo. Como no firmware: parado, a altura fica congelada;
-    // em movimento, acumula uma deriva pequena (0,3 cm/s) que o jogo corrige ao voltar à posição baixa
-    const s = (thSim - cfg.min) / ((cfg.max - cfg.min) || 1);
-    quietoT = Math.abs(s - sAnt) / dt < 0.05 ? quietoT + dt : 0; sAnt = s;   // parado há 0,1 s → repouso
-    if (quietoT < 0.1) {
-      deriva += 0.3 * dt;
-      zSim = cfg.altMin + s * (cfg.altMax - cfg.altMin) + deriva + (Math.random() - 0.5) * 0.2;
-    }
-    const linha = `${Math.round(agora)},${(thSim + (Math.random() - 0.5)).toFixed(2)},${ax.toFixed(3)},${ay.toFixed(3)},${az.toFixed(3)},${zSim.toFixed(1)},${quietoT >= 0.1 ? 1 : 0}`;
+    // Paciente virtual: o braço é um sistema massa-mola-amortecedor (amortecimento crítico) que persegue o alvo.
+    // a = ωn²·(alvo − z) − 2ωn·v ; v e z pelos mesmos trapézios do jogo, com o mesmo Δt do pacote
+    const A = (cfg.altMax - cfg.altMin) / 100, wn = 1 / perfil.atraso;          // amplitude (m), rad/s
+    const aNova = wn * wn * (alvo * perfil.ganho * A - zSim) - 2 * wn * vSim;
+    const vNova = vSim + dt / 2 * (aSim + aNova);
+    zSim += dt / 2 * (vSim + vNova); vSim = vNova; aSim = aNova;
+    const sSim = zSim / (A || 1), aF = aSim;
+    thSim = cfg.min + (cfg.max - cfg.min) * sSim;                    // o punho inclina junto com o braço
+    // Pacote como o da ESP32 (5.4.3): a aceleração linear vertical decomposta em y e z pelo ângulo θ
+    const r = thSim * Math.PI / 180, ruido = () => (Math.random() - 0.5) * 0.04;
+    const trem = perfil.tremor * Math.sin(2 * Math.PI * 6 * agora / 1000);
+    const ay = (aF + trem) * Math.sin(r) + ruido(), az = (aF + trem) * Math.cos(r) + ruido();
+    const ax = perfil.lateral * aF + 0.5 * trem + ruido();
+    const linha = `${Math.round(agora)},${(thSim + (Math.random() - 0.5)).toFixed(2)},${ax.toFixed(3)},${ay.toFixed(3)},${az.toFixed(3)}`;
     if (cfg.sessao && estado !== 'fim') brutos.push(linha);
     receber(linha);
   }, 20);
@@ -360,7 +342,6 @@ function prepararEtapa() {
 
 async function iniciarSerie() {
   if (!fonte) return alert('Conecte o haltere ou use o modo simulado.');
-  if (!temAltura) return alert('O haltere não está enviando a altura. Grave o firmware novo no ESP32.');
   if (estado === 'jogando' || estado === 'fim') return;
   const { n, braco } = atual();
   $('btIniciar').disabled = true;
@@ -369,10 +350,10 @@ async function iniciarSerie() {
     if (!r) { $('btIniciar').disabled = false; return alert('Não foi possível registrar a série. Verifique se a sessão ainda está aberta na plataforma.'); }
     serieId = r.id;
   }
-  if (parado) zerarAltura();                                 // a série começa com o haltere parado na posição baixa
+  zerarAltura();                                             // a série começa com o haltere parado na posição baixa
   estado = 'jogando';
   canos = []; proxCano = 1; proxTipo = 'alto'; pontos = passados = totalCanos = 0; tJogo = 0;
-  reps = []; tUltimaRep = null; repMin = repMax = theta; repMinAlt = altura; velPico = 0;
+  reps = []; tUltimaRep = null; repMin = repMax = theta; velPico = 0;
   fase = progresso() > 0.5 ? 'alto' : 'baixo';
   $('intervalo').classList.remove('on'); $('btEncerrar').disabled = false;
 }
