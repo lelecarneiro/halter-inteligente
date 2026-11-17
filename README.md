@@ -252,9 +252,10 @@ Se o sinal do haltere cair, o jogo **pausa sozinho** e retoma quando os dados vo
 
 | Seção | Método |
 |---|---|
-| 5.1 | Leitura a 100 Hz (Δt = 0,01 s), envio a 50 Hz (Δt = 0,02 s) |
+| 5.1 | Leitura a 100 Hz em cadência fixa (Δt = 0,01 s), envio a 50 Hz (Δt = 0,02 s) |
 | 5.2 | Calibração: média de 500 amostras em repouso para o offset do giroscópio; conversão de unidades (8192 LSB/g, 65,5 LSB/(°/s)) |
-| 5.4 | Ângulo: extrapolação de Euler `θ_prev = θ + ω·Δt`, ângulo do acelerômetro `atan2(ay, az)` e correção por gradiente descendente |
+| 5.7 | Filtro digital passa-baixa de 1ª ordem com corte em 12 Hz em cada leitura (acelerômetro e giroscópio) |
+| 5.4 | Ângulo: extrapolação linear `θ_prev(t_k) = θ(t_k−1) + ω(t_k−1)·Δt`, ângulo do acelerômetro `atan2(ay, az)` e gradiente descendente `θ = θ_prev − α·(θ_prev − θ_acel)` |
 | 5.4.3 | Subtração da gravidade nos eixos Y e Z |
 
 ### No jogo (`frontend/game/index.html`)
@@ -275,7 +276,7 @@ Calculado para cada série e para cada braço (todas as séries dele juntas).
 | 5.6 Diferenças finitas | Jerk `J = Δa_lin / Δt`; índice de suavidade = trapézios de \|J\| | Jerk médio, **nota de suavidade** |
 | 5.7 Média móvel e resíduo | K = 10; tremor = `a_lin − a_lenta`; intensidade pelo RMS | RMS do tremor |
 | 5.8 Estatística | Média μx, variância S²x e desvio padrão Sx da posição lateral | **Nota de estabilidade** (compensação postural) |
-| 5.9 Interpolação | Tempo normalizado `τ = t / T_total`, interpolação linear em 101 pontos, RMSE | **Nota de trajetória** (vs. ideal) e **nota de simetria** (afetado vs. saudável), atraso do ápice |
+| 5.9 Interpolação | Tempo normalizado `τ = t / T_total`, interpolação linear de Lagrange (`interpolacao_linear`) em 101 pontos, RMSE | **Nota de trajetória** (vs. ideal) e **nota de simetria** (afetado vs. saudável), atraso do ápice |
 | 5.10 Score | `Nota = 100 · (1 − erro / erro_máx)`, limitada entre 0 e 100 | **Score geral** = 0,30·Trajetória + 0,30·Simetria + 0,25·Estabilidade + 0,15·Suavidade |
 
 **Simetria.** O braço saudável é a referência do afetado **na própria sessão**. O score do braço afetado inclui a nota de simetria. O score do saudável não inclui, e o peso dela é redistribuído entre as outras notas.
@@ -380,7 +381,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 ## Limitações conhecidas
 - O login é único e simples, adequado ao protótipo. Não use a senha padrão com dados reais de pacientes.
 - O servidor aceita conexões apenas do próprio computador (`localhost`).
-- O resíduo da média móvel (tremor) também captura um pouco do movimento voluntário, e o filtro de 12 Hz citado no memorial não foi implementado.
+- O resíduo da média móvel (tremor) também captura um pouco do movimento voluntário. O filtro de 12 Hz é de 1ª ordem: atenua pouco acima do corte (cerca de −6 dB a 25 Hz).
 - O índice de suavidade (integral de |J| no tempo) tem unidade m/s².
 - Os limites de erro máximo das notas (`ERRO_MAX`, no backend) e as faixas de interpretação das cores (`FAIXAS`, na plataforma) são valores iniciais: precisam ser calibrados com voluntários saudáveis e revisados pela equipe clínica.
 - As frases automáticas descrevem o que os dados mostram e sugerem pontos a observar; elas não substituem a avaliação do fisioterapeuta.

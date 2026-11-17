@@ -275,7 +275,20 @@ def media_movel(x, k=K_MEDIA):
     return (soma[n] - soma[inicio]) / (n - inicio)
 
 
+def interpolacao_linear(tau, tau_amostras, p_amostras):
+    """5.9 Interpolação linear de Lagrange entre os dois pontos vizinhos (τ0 ≤ τ ≤ τ1):
+    p_interp(τ) = p(τ0) + [(p(τ1) − p(τ0)) / (τ1 − τ0)] · (τ − τ0)"""
+    tau_amostras, p_amostras = np.asarray(tau_amostras, float), np.asarray(p_amostras, float)
+    i1 = np.clip(np.searchsorted(tau_amostras, tau, side='right'), 1, len(tau_amostras) - 1)
+    i0 = i1 - 1
+    t0, t1, p0, p1 = tau_amostras[i0], tau_amostras[i1], p_amostras[i0], p_amostras[i1]
+    passo = np.where(t1 > t0, t1 - t0, 1.0)                     # amostras repetidas no tempo: evita divisão por 0
+    inclinacao = np.where(t1 > t0, (p1 - p0) / passo, 0.0)
+    return p0 + inclinacao * (np.clip(tau, tau_amostras[0], tau_amostras[-1]) - t0)
+
+
 def rmse(a, b):
+    """5.9 RMSE = √[(1/M) · Σ (p_paciente(τ_i) − p_referência(τ_i))²]"""
     return float(np.sqrt(np.mean((np.asarray(a) - np.asarray(b)) ** 2)))
 
 
@@ -369,7 +382,7 @@ def analisar_grupo(dados, grupos, series_temporais=False):
             # repouso (não tem um ciclo completo antes dela), então fica fora da comparação de trajetórias.
             if rep['duracao_s'] is None:
                 continue
-            curva = np.interp(tau, frac, sentido * (theta[j] - serie['amp_min']))
+            curva = interpolacao_linear(tau, frac, sentido * (theta[j] - serie['amp_min']))
             curvas.append(curva)
             ideais.append(ideal)
             erros_traj.append(rmse(curva, ideal))
