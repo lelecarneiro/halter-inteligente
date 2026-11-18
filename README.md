@@ -128,9 +128,9 @@ No jogo, clique em **Modo simulado**. Um "paciente virtual" segue a trilha dos o
 1. **Plataforma → Pacientes:** escolha o paciente (ou cadastre um novo).
 2. **Nova sessão:** escolha o exercício, o número de séries, as repetições por série, qual braço começa, a cadência, a amplitude e a duração máxima de cada série. Clique em **Criar sessão e abrir o jogo**.
 3. **No jogo:** clique em **Conectar haltere** (ou **Modo simulado**). O painel mostra a primeira etapa, por exemplo "Série 1 · Braço saudável".
-4. **Ajuste a amplitude do braço da vez:** peça ao paciente para ir até a posição baixa e toque em **"atual"**, e depois faça o mesmo na posição alta.
-5. Toque em **Iniciar série**. A série termina sozinha ao atingir as repetições ou a duração máxima, ou quando você toca em **Encerrar série**.
-6. **Intervalo:** aparece o resultado da série e o aviso **"Passe o haltere para a outra mão"**. Ajuste a amplitude do outro braço (passo 4) e toque em **Começar próxima série**.
+4. Toque em **Iniciar série**. Antes de começar, aparece o aviso grande **"⚠️ Ajuste os ângulos antes de começar"**, com o ângulo atual do haltere e uma régua.
+5. **Ajuste os ângulos do braço da vez:** peça ao paciente para ir até a posição baixa e toque em **"Marcar ângulo atual"**. Depois faça o mesmo na posição alta. Confira se o ponteiro amarelo percorre a faixa verde e toque no botão verde **"Ângulos ajustados — iniciar série"**. O botão fica bloqueado sem dados do haltere ou se as duas posições estiverem a menos de 10° uma da outra. A série termina sozinha ao atingir as repetições ou a duração máxima, ou quando você toca em **Encerrar série**.
+6. **Intervalo:** aparece o resultado da série e o aviso **"Passe o haltere para a outra mão"**. Toque em **Ajustar ângulos e começar**: o aviso de ajuste (passo 5) aparece de novo, agora para o outro braço.
 7. Repita até a última série. Para parar antes, use **Encerrar sessão agora** no intervalo.
 8. **Resumo final:** aparecem a pontuação total, as estrelas e um cartão por braço. Toque em **Ver análise na plataforma**.
 
@@ -138,11 +138,15 @@ No jogo, clique em **Modo simulado**. Um "paciente virtual" segue a trilha dos o
 
 ## Usando a plataforma
 
+A trilha no topo (**Pacientes › Nome do paciente › Sessão**) mostra onde você está e volta a qualquer nível com um clique.
+
 | Tela | O que tem |
 |---|---|
-| **Pacientes** | Lista de pacientes e cadastro (nome, nascimento, observações clínicas) |
-| **Paciente** | Editar ou excluir · nova sessão · situação atual · evolução · histórico (tudo filtrado por exercício) |
-| **Sessão** | Resumo com frases automáticas · indicadores do braço afetado · comparação entre os braços · repetição por repetição · séries e fadiga |
+| **Pacientes** | Lista com busca (a partir de 5 pacientes) e o botão **+ Novo paciente** |
+| **Paciente** | **+ Nova sessão**, **Exportar dados** e o menu **⋯** (editar, excluir). Abas **Situação atual · Evolução · Histórico**, filtradas pelo exercício escolhido à direita das abas |
+| **Sessão** | Resumo com o score e as frases automáticas. Abas **Indicadores · Comparação entre braços · Repetições · Séries · Dados técnicos** |
+
+Cada gráfico tem um **ⓘ Como ler** recolhido, que abre a explicação ao clicar.
 
 ### Nova sessão
 
@@ -156,10 +160,10 @@ No jogo, clique em **Modo simulado**. Um "paciente virtual" segue a trilha dos o
 | Duração máx. | Limite de tempo de cada série, em minutos |
 | Posição baixa / alta | Amplitude inicial, que pode ser ajustada por braço no jogo |
 
-Ao escolher um exercício, os campos são preenchidos com os valores da **última sessão daquele exercício** do paciente. Abaixo do botão aparece o plano, por exemplo: "3 séries × 2 braços = 6 etapas".
+O formulário abre ao clicar em **+ Nova sessão** (para um paciente sem sessões, ele já aparece aberto). Ao escolher um exercício, os campos são preenchidos com os valores da **última sessão daquele exercício** do paciente. Ao lado do botão aparece o plano, por exemplo: "3 séries × 2 braços = 6 etapas".
 
 ### Exercícios
-Cada sessão pertence a uma **categoria de exercício**. A evolução, os gráficos e o histórico mostram **um exercício por vez**: o histórico de elevação lateral, por exemplo, só compara sessões de elevação lateral. Use o filtro **Exercício** para trocar.
+Cada sessão pertence a uma **categoria de exercício**. A evolução, os gráficos e o histórico mostram **um exercício por vez**: o histórico de elevação lateral, por exemplo, só compara sessões de elevação lateral. Para trocar, use a lista de exercícios à direita das abas.
 
 | Categoria | Movimento |
 |---|---|
@@ -177,28 +181,31 @@ Cada sessão pertence a uma **categoria de exercício**. A evolução, os gráfi
 **Criar uma categoria:** na lista **Exercício**, escolha **"+ Nova categoria…"** e informe o nome e, se quiser, a descrição. Categorias criadas por você podem ser excluídas enquanto ainda não tiverem sessões.
 
 ### Página do paciente
-- **Situação atual:** o score geral e os 6 indicadores da última sessão, cada um com cor (Bom / Atenção / Alerta) e uma seta mostrando como mudou desde a 1ª sessão.
-- **Evolução do braço afetado:** gráficos com uma pergunta clínica como título e uma linha "Como ler" embaixo:
+- **Situação atual:** o score geral e os 6 indicadores da última sessão, cada um com cor (Bom / Atenção / Alerta) e uma seta mostrando como mudou desde a 1ª sessão. O link **Ver sessão** abre a análise da última sessão.
+- **Evolução do braço afetado:** gráficos com uma pergunta clínica como título e um **ⓘ Como ler** recolhido:
   - *O braço afetado está se aproximando do saudável?* Amplitude do afetado em % do saudável, com a faixa de simetria (90 % a 110 %) em verde.
   - *Score geral de cada braço.*
   - **Seis gráficos pequenos**, cada um marcado com "↑ maior é melhor" ou "↓ menor é melhor": amplitude, ritmo, desvio do movimento ideal, fluidez, tremor e desvio lateral.
-- **Histórico:** sessões do exercício com o score do afetado (com cor), a amplitude em % do saudável, o ritmo e o número de pontos de atenção.
+- **Histórico:** sessões do exercício com o score do afetado (com cor), a amplitude em % do saudável, o ritmo e o número de pontos de atenção. Clique numa linha para abrir a sessão.
 
 ### Página da sessão
-1. **Resumo:** o score geral do braço afetado (com cor e comparação com a sessão anterior) e a lista **"O que observar nesta sessão"**, com frases automáticas. Por exemplo:
+O resumo fica sempre visível no topo, e o restante fica em abas:
+
+1. **Resumo:** o score geral do braço afetado (com cor e comparação com a sessão anterior) e a lista **"O que observar"**, com frases automáticas. Por exemplo:
    - *"Desvio lateral 2,3× maior no braço afetado: observe compensação com ombro ou tronco."*
    - *"A amplitude do braço afetado caiu 15 % da 1ª para a última série: possível fadiga."*
    - *"O score do braço afetado subiu 13 pontos em relação à sessão anterior."*
-2. **Indicadores do braço afetado:** 6 cartões, cada um com a pergunta que responde, o valor em linguagem simples, a cor, um detalhe e a comparação com a sessão anterior. O **?** de cada cartão explica o que é medido.
+2. **Indicadores:** 6 cartões do braço afetado, cada um com o valor em linguagem simples, a cor, um detalhe e a comparação com a sessão anterior. O **?** de cada cartão diz a pergunta que ele responde e o que é medido.
 3. **Comparação entre os braços:**
    - *Afetado × saudável em cada aspecto:* barras de 0 a 100 lado a lado.
    - *Como é uma repetição média?* As curvas dos dois braços com o movimento ideal.
-4. **Repetição por repetição:**
+4. **Repetições:**
    - *Cada repetição alcançou a amplitude pedida?* Barras em % da meta.
    - *O ritmo foi mantido?* Pontos com a faixa do ritmo em verde.
 5. **Séries:** tabela por série e o gráfico *Houve fadiga ao longo das séries?*
-6. **Detalhes técnicos** (recolhido): métricas do memorial de cálculo e sinais do sensor de cada série, para a equipe de engenharia.
-7. **Entenda os indicadores e as cores** (recolhido): glossário com o que cada indicador mede e as faixas de cada cor.
+6. **Dados técnicos:** métricas do memorial de cálculo e sinais do sensor de cada série, para a equipe de engenharia.
+
+No fim das páginas do paciente e da sessão, **ⓘ Entenda os indicadores e as cores** abre o glossário com o que cada indicador mede e as faixas de cada cor.
 
 ### Como os indicadores são interpretados
 Todos os indicadores se referem ao **braço afetado**. Sempre que possível, ele é comparado com o **próprio braço saudável do paciente na mesma sessão**. Assim, a referência é o paciente, e não um valor de laboratório.
@@ -217,8 +224,23 @@ Todos os indicadores se referem ao **braço afetado**. Sempre que possível, ele
 
 As cores de status sempre aparecem com ícone e texto (✓ Bom, ! Atenção, ✕ Alerta), para não depender só da cor.
 
+### Exportar os dados do paciente
+Na página do paciente, **⬇ Exportar dados** baixa um arquivo `.zip` com tudo o que foi coletado:
+
+| Arquivo | Conteúdo |
+|---|---|
+| `LEIA-ME.txt` | O que há em cada arquivo e as unidades |
+| `paciente.csv` | Cadastro do paciente |
+| `sessoes.csv` | Uma linha por sessão: configuração, score, indicadores de cada braço (`saudavel_*`, `afetado_*`) e a comparação entre os braços (`simetria_*`) |
+| `series.csv` | Uma linha por série |
+| `repeticoes.csv` | Uma linha por repetição |
+| `leituras_sensor/` | Leituras do haltere de cada sessão (tempo, θ e aceleração) |
+| `graficos/` | Evolução de cada exercício e, em `graficos/sessoes/`, o resumo de cada sessão concluída (PNG) |
+
+Os CSV usam ponto e vírgula e vírgula decimal, e abrem direto no Excel em português.
+
 ### Editar e excluir pacientes
-Na página do paciente, use **Editar** para corrigir nome, nascimento e observações. **Excluir paciente** pede confirmação e apaga também todas as sessões, séries, repetições e leituras brutas do haltere. A exclusão não pode ser desfeita.
+Na página do paciente, abra o menu **⋯** e use **Editar paciente** para corrigir nome, nascimento e observações. **Excluir paciente** pede confirmação e apaga também todas as sessões, séries, repetições e leituras brutas do haltere. A exclusão não pode ser desfeita.
 
 ---
 
@@ -229,7 +251,34 @@ Na página do paciente, use **Editar** para corrigir nome, nascimento e observa�
 - Os **canos** chegam no ritmo da cadência, alternando abertura no alto (levantar) e embaixo (abaixar). A **linha tracejada** mostra o movimento ideal.
 - Cada obstáculo superado vale **+10 pontos**, e cada repetição no ritmo vale **+5**. O feedback aparece na hora: "No ritmo ✓", "Mais devagar" ou "Mais rápido".
 - Bater no cano **não encerra o jogo**: o cano fica vermelho e não pontua.
+- **Feedback sonoro:** cada acerto e cada erro têm um som próprio, para o paciente perceber o resultado mesmo sem olhar para a tela:
+
+| Momento | Som |
+|---|---|
+| Passou pelo obstáculo | Duas notas subindo; o tom fica mais agudo conforme o combo cresce |
+| Bateu no obstáculo | Tom grave descendo, tocado **na hora da batida** |
+| Repetição no ritmo | Sininho (arpejo) |
+| Repetição fora do ritmo | Dois toques neutros, um aviso e não uma punição |
+
+  Opcionalmente, uma **voz** em português fala "Muito bem!", "Isso!", "Mais devagar" ou "Mais rápido". As dicas de ritmo sempre são faladas, e os elogios no máximo a cada 1,5 s, para não atropelar. No painel **Feedback sonoro** dá para ligar ou desligar os sons e a voz, ajustar o volume e ouvir todos os sons com **▶ Testar sons**. A preferência fica salva no computador. Por padrão, os sons vêm ligados e a voz desligada.
 - No fim, a **pontuação total** aparece em destaque, com até 3 estrelas (pela porcentagem de obstáculos superados) e um cartão por braço.
+
+### Níveis, conquistas e personalização
+O progresso é **de cada paciente** e fica salvo no backend: nível, XP, conquistas e o personagem escolhido aparecem de novo na próxima sessão, mesmo em outro computador. No jogo sem sessão (aberto direto em `/game/`), o progresso fica só no navegador.
+
+- **Combo:** obstáculos superados em sequência multiplicam os pontos: ×2 a partir de 5 seguidos e ×3 a partir de 10. Bater num cano zera o combo.
+- **XP e níveis:** os níveis são liberados pelo **Score Geral** (seção 5.10 do memorial). Ao encerrar cada série, o backend calcula `Nota_i = 100 · (1 − Erro_medido,i / Erro_máx,i)` (limitada entre 0 e 100) e o `Score Geral = 0,30·Trajetória + 0,30·Simetria + 0,25·Estabilidade + 0,15·Suavidade`, e esse score (0 a 100) é somado ao XP do paciente. Numa série isolada não há a nota de simetria, porque ela compara os dois braços, então o peso dela é redistribuído entre as outras notas, como no restante da análise. Os pontos do jogo e as conquistas **não** dão XP. Os níveis ficam progressivamente mais longos (150, 400, 750, 1.200 XP…), e cada um tem um título (Iniciante, Aprendiz, Dedicado…). Sem sessão (jogo livre), não há análise do movimento, então o nível não avança.
+- **Conquistas:** 13 no total. Elas premiam **ritmo, controle e constância, nunca velocidade**, para não incentivar o paciente a se apressar. Exemplos: *No compasso* (5 repetições seguidas no ritmo), *Sem arranhões* (série sem bater em nenhum obstáculo), *Constância* (5 sessões) e *Superação* (braço afetado alcança 90 % da amplitude do saudável). Botão **🏆** no painel.
+- **Personalização:** botão **🎨 Personalizar** no painel, fora das séries.
+
+| Item | Como liberar |
+|---|---|
+| Personagens | Pássaro (nível 1), Abelha (2), Peixe (3), Foguete (5), Dragão (7) |
+| Cores | 8 cores, todas livres |
+| Acessórios | Boné (2), Óculos de sol (3), Laço (4), Cartola (6); Coroa (conquista *Ritmo perfeito*) e Medalha (conquista *Constância*) |
+| Cenários | Céu azul (1), Pôr do sol (2), Floresta (3), Fundo do mar (4), Montanha de neve (6), Espaço (8) |
+
+Ao subir de nível ou ganhar uma conquista, aparece um aviso na parte de baixo do jogo. O resumo de cada série e a tela final mostram o XP ganho, a barra de nível e as conquistas novas. A exportação de dados do paciente inclui o XP e as conquistas em `paciente.csv`.
 
 ### Painel do profissional (lateral)
 
@@ -238,7 +287,7 @@ Na página do paciente, use **Editar** para corrigir nome, nascimento e observa�
 | Conectar haltere / Modo simulado | Fonte dos dados |
 | Séries da sessão | Lista das etapas, com a atual destacada e as concluídas riscadas |
 | Cadência alvo | Muda o ritmo dos canos **na hora**, inclusive durante a série |
-| Posição baixa / alta + "atual" | Amplitude do **braço da vez**. Cada braço guarda a sua |
+| Posição baixa / alta + "atual" | Amplitude do **braço da vez**. Cada braço guarda a sua. Também é ajustada no aviso que aparece antes de cada série |
 | Duração máxima | Limite de tempo da série |
 | Iniciar série / Encerrar série | Controle de cada etapa |
 
@@ -319,6 +368,7 @@ data/                      criada ao rodar (fora do Git)
 | `sessions` | Paciente, exercício, configuração (séries, repetições, ordem, cadência, amplitude, duração), score geral e resumo da análise por braço |
 | `series` | Número, braço, cadência e amplitude usadas, resultados do jogo e análise da série |
 | `reps` | Cada repetição: tempo, amplitude, velocidade de pico, duração, se estava no ritmo |
+| `jogadores` | Progresso de cada paciente no jogo: XP, conquistas (com data) e personalização |
 
 O banco é **atualizado automaticamente** ao iniciar o backend. Sessões de versões anteriores, que tinham um braço só, viram sessões de uma série, sem perda de dados.
 
@@ -346,6 +396,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 | `GET` / `POST` | `/api/patients` | Listar e cadastrar pacientes |
 | `GET` · `PUT` · `DELETE` | `/api/patients/<id>` | Ver, editar ou excluir o paciente (exclui também as sessões) |
 | `GET` | `/api/patients/<id>/sessions?exercicio_id=<id>` | Histórico com as métricas, opcionalmente de um exercício |
+| `GET` | `/api/patients/<id>/export` | Baixar o `.zip` com os dados do paciente (CSV) e os gráficos (PNG) |
 | `GET` / `POST` | `/api/exercicios` | Listar e criar categorias de exercício |
 | `DELETE` | `/api/exercicios/<id>` | Excluir categoria personalizada ainda sem sessões |
 | `POST` | `/api/sessions` | Criar sessão; devolve o link do jogo configurado |
@@ -356,6 +407,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 | `POST` | `/api/sessions/<id>/end` | Encerrar a sessão; análise por braço e simetria |
 | `GET` | `/api/sessions/<id>` | Sessão com séries, repetições e análise por braço |
 | `GET` | `/api/series/<id>` | Série com os sinais para os gráficos |
+| `GET` / `PUT` | `/api/sessions/<id>/jogador` | Progresso do paciente no jogo (XP, conquistas, personagem e cenário) |
 | `GET` | `/api/stream` | Leituras do haltere em tempo real (Server-Sent Events) |
 
 ---
@@ -369,7 +421,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 | `No module named 'bleak'` ou `'flask'` | Rode `python3 -m pip install -r requirements.txt` |
 | Jogo mostra "procurando haltere…" | Confira se o ESP32 está ligado com o LED verde aceso e se o Terminal tem permissão de Bluetooth. Só um computador pode estar conectado ao haltere por vez |
 | Jogo mostra "Sinal do haltere perdido" | O jogo pausa sozinho e retoma quando os dados voltam. Aproxime o haltere do computador |
-| As repetições não são contadas (comum no braço afetado) | Ajuste a posição baixa e a alta **do braço da vez** com o botão **"atual"**. A repetição só conta se passar de 70 % da amplitude configurada e voltar abaixo de 30 %. Se o braço afetado não alcança a posição alta do saudável, configure uma posição alta menor para ele |
+| As repetições não são contadas (comum no braço afetado) | Ajuste a posição baixa e a alta **do braço da vez** no aviso de ajuste antes da série (ou com o botão **"atual"** no painel). A repetição só conta se passar de 70 % da amplitude configurada e voltar abaixo de 30 %. Se o braço afetado não alcança a posição alta do saudável, configure uma posição alta menor para ele |
 | "Não foi possível registrar a série" | A sessão já foi encerrada. Crie uma nova sessão na plataforma |
 | Análise sem métricas de tremor, jerk etc. | Não houve leituras do haltere durante a série. Confira a conexão, ou use o modo simulado para testar |
 | Erro de banco depois de atualizar o projeto | O banco é atualizado automaticamente ao iniciar o backend. Se o erro continuar, apague `data/halter.db` (o histórico será perdido) |

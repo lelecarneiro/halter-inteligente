@@ -51,6 +51,7 @@
   label span { flex:1; }
   input[type=number] { width:64px; padding:5px; border-radius:6px; border:1px solid var(--borda); background:#0b1220; color:var(--txt); font:inherit; }
   input[type=range] { flex:1; accent-color:var(--acento); }
+  input[type=checkbox] { width:20px; height:20px; accent-color:var(--acento); }
   button { padding:8px 10px; border-radius:8px; border:1px solid #374151; background:#1f2937; color:var(--txt); font:inherit; cursor:pointer; }
   button.pri { background:var(--acento); border:0; color:#0b1220; font-weight:700; }
   button:disabled { opacity:.4; cursor:default; }
@@ -62,6 +63,69 @@
   #plano li { padding:3px 0; color:var(--sub); }
   #plano li.atual { color:var(--txt); font-weight:700; }
   #plano li.feita { text-decoration:line-through; }
+  /* Aviso de ajuste dos ângulos antes de cada série */
+  #ajuste { background:#000e; }
+  .ajuste-caixa { max-width:640px; width:100%; }
+  .ajuste-alerta { display:inline-flex; align-items:center; gap:10px; background:var(--aviso); color:#1a1205; font-weight:900;
+                   font-size:clamp(20px, 3.4vw, 30px); padding:12px 22px; border-radius:14px; text-transform:uppercase; letter-spacing:.03em;
+                   animation:piscar 1.4s ease-in-out infinite; }
+  @keyframes piscar { 50% { box-shadow:0 0 0 10px #f59e0b33; } }
+  .ajuste-theta { font-size:64px; font-weight:900; font-variant-numeric:tabular-nums; margin:12px 0 0; line-height:1; }
+  .regua { position:relative; height:16px; border-radius:8px; background:#ffffff14; margin:14px 0 4px; }
+  .regua .faixa { position:absolute; top:0; bottom:0; background:#22c55e44; border-left:3px solid var(--ok); border-right:3px solid var(--ok); }
+  .regua .ponteiro { position:absolute; top:-6px; width:6px; height:28px; margin-left:-3px; border-radius:3px; background:var(--ouro); }
+  .posicoes { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; text-align:left; }
+  .posicao { background:#ffffff0d; border:1px solid var(--borda); border-radius:12px; padding:12px; }
+  .posicao .nome { color:var(--sub); font-size:13px; text-transform:uppercase; letter-spacing:.06em; }
+  .posicao .linha { margin-top:8px; }
+  .posicao input { width:90px; font-size:20px; font-weight:700; }
+  .passos { text-align:left; color:var(--sub); font-size:14px; margin:14px 0 0; padding-left:20px; }
+  .passos li { margin:3px 0; }
+  #ajusteAviso { color:var(--aviso); font-weight:700; min-height:1.4em; margin-top:10px; }
+  button.gigante { width:100%; font-size:clamp(20px, 3vw, 26px) !important; padding:20px !important; margin-top:6px; border-radius:14px;
+                   background:var(--ok); color:#06210f; font-weight:900; border:0; box-shadow:0 8px 24px #22c55e44; }
+  button.gigante:disabled { background:#374151; color:var(--sub); box-shadow:none; }
+  @media (max-width:560px) { .posicoes { grid-template-columns:1fr; } }
+  /* ---------- Gamificação ---------- */
+  #perfil { background:linear-gradient(135deg, #1e293b, #111827); border:1px solid var(--borda); border-radius:14px; padding:12px; }
+  .perfil-topo { display:flex; gap:12px; align-items:center; }
+  #avatar { width:64px; height:64px; border-radius:12px; flex:none; }
+  .perfil-nome { font-weight:800; font-size:16px; }
+  .perfil-nivel { color:var(--ouro); font-size:13px; font-weight:600; }
+  .xp { height:10px; border-radius:5px; background:#ffffff14; overflow:hidden; margin:10px 0 4px; }
+  .xp i { display:block; height:100%; width:0; background:linear-gradient(90deg, #facc15, #f97316); border-radius:5px; transition:width .8s; }
+  .xp.grande { height:14px; max-width:420px; margin:8px auto 4px; }
+  #perfil .linha { margin-top:8px; }
+  #chipCombo { color:#fdba74; font-weight:800; }
+  #toast { position:absolute; bottom:24px; left:50%; z-index:40; transform:translate(-50%, 20px); opacity:0; pointer-events:none; transition:all .35s;
+           display:flex; gap:12px; align-items:center; background:#0b1220f0; border:2px solid var(--ouro); border-radius:14px; padding:10px 18px;
+           min-width:280px; max-width:90%; box-shadow:0 10px 30px #0009; }
+  #toast.on { opacity:1; transform:translate(-50%, 0); }
+  #toast .ic { font-size:34px; } #toast b { display:block; color:var(--ouro); } #toast.nivel { border-color:var(--acento); } #toast.nivel b { color:var(--acento); }
+  #personalizar, #conquistasTela { background:#0b1220f7; }
+  .loja { max-width:880px; width:100%; text-align:left; }
+  .loja h1, .loja > .sub { text-align:center; }
+  .loja-grade { display:grid; grid-template-columns:230px 1fr; gap:22px; margin-top:12px; }
+  .previa-caixa { text-align:center; }
+  #previa { width:230px; height:230px; border-radius:16px; border:2px solid var(--borda); }
+  .loja h2 { margin:14px 0 8px; }
+  .opcoes { display:flex; flex-wrap:wrap; gap:8px; }
+  .opcao { display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px; min-width:86px; border-radius:12px; border:2px solid var(--borda); background:#ffffff08; font-size:13px; }
+  .opcao canvas { width:64px; height:46px; border-radius:8px; }
+  .opcao.sel { border-color:var(--ouro); background:#facc1514; }
+  .opcao:disabled { opacity:.45; } .opcao .req { font-size:11px; color:var(--sub); }
+  .cor { width:36px; height:36px; border-radius:50%; border:3px solid transparent; padding:0; }
+  .cor.sel { border-color:#fff; box-shadow:0 0 0 2px var(--ouro); }
+  .trofeus { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; max-width:880px; margin:16px auto 0; text-align:left; }
+  .trofeu { display:flex; gap:10px; align-items:center; background:#ffffff0d; border:1px solid var(--borda); border-radius:12px; padding:10px; }
+  .trofeu .ic { font-size:30px; } .trofeu b { display:block; font-size:14px; } .trofeu span { font-size:12px; color:var(--sub); }
+  .trofeu.bloq { opacity:.4; filter:grayscale(1); } .trofeu.ganho { border-color:var(--ouro); }
+  .medalhas { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+  .medalha-nova { background:#facc1514; border:1px solid var(--ouro); border-radius:12px; padding:8px 12px; display:flex; gap:8px; align-items:center; animation:surgir .5s both; }
+  @keyframes surgir { from { transform:scale(.6); opacity:0; } }
+  .ganho-xp { color:var(--ouro); font-weight:800; }
+  .xp-final { margin-top:14px; }
+  @media (max-width:700px) { .loja-grade { grid-template-columns:1fr; } #previa { width:170px; height:170px; } }
   @media (max-width:800px) { body { grid-template-columns:1fr; grid-template-rows:60vh auto; } aside { border-left:0; } }
 </style>
 </head>
@@ -75,14 +139,60 @@
     <span class="chip">⭐ <b id="hPontos">0</b></span>
     <span class="chip">🔁 <b id="hReps">0</b> rep</span>
     <span class="chip">🎯 <b id="hRitmo">–</b> no ritmo</span>
+    <span class="chip" id="chipCombo" style="display:none">🔥 Combo <b id="hCombo">0</b> · ×<b id="hMult">1</b></span>
     <span class="chip" id="feedback" style="display:none"></span>
   </div>
   <div id="aviso" class="tela"><div id="avisoTxt"></div></div>
   <div id="intervalo" class="tela"><div id="intervaloTxt"></div></div>
+  <div id="ajuste" class="tela"><div class="ajuste-caixa">
+    <div class="ajuste-alerta">⚠️ Ajuste os ângulos antes de começar</div>
+    <h1 style="margin-top:16px" id="ajusteTitulo"></h1>
+    <p class="sub">Ângulo atual do haltere</p>
+    <div class="ajuste-theta"><span id="ajusteTheta">–</span>°</div>
+    <div class="regua" title="Faixa verde: entre a posição baixa e a alta"><div class="faixa" id="reguaFaixa"></div><div class="ponteiro" id="reguaPonteiro"></div></div>
+    <div class="posicoes">
+      <div class="posicao"><div class="nome">⬇ Posição baixa</div>
+        <div class="linha"><input id="ajMin" type="number" step="1"> °<button data-marcar="min">Marcar ângulo atual</button></div></div>
+      <div class="posicao"><div class="nome">⬆ Posição alta</div>
+        <div class="linha"><input id="ajMax" type="number" step="1"> °<button data-marcar="max">Marcar ângulo atual</button></div></div>
+    </div>
+    <ol class="passos">
+      <li>Com o haltere na mão certa, peça ao paciente para ir até a <b>posição baixa</b> e toque em “Marcar ângulo atual”.</li>
+      <li>Depois, até a <b>posição alta</b> que ele consegue alcançar com conforto, e marque de novo.</li>
+      <li>Confira se o ponteiro amarelo percorre a faixa verde ao repetir o movimento.</li>
+    </ol>
+    <p id="ajusteAviso"></p>
+    <button class="gigante" id="btConfirmarAjuste">✓ Ângulos ajustados — iniciar série</button>
+    <div class="botoes" style="margin-top:12px"><button id="btVoltarAjuste">Voltar</button></div>
+  </div></div>
   <div id="final" class="tela"><div id="finalTxt"></div></div>
+  <div id="personalizar" class="tela"><div class="loja">
+    <h1>🎨 Personalize</h1>
+    <p class="sub">Cada série soma o seu Score Geral (0 a 100) ao XP. Suba de nível e ganhe conquistas para liberar personagens, acessórios e cenários.</p>
+    <div class="loja-grade">
+      <div class="previa-caixa"><canvas id="previa"></canvas><p class="sub" id="previaNome"></p></div>
+      <div id="lojaOpcoes"></div>
+    </div>
+    <div class="botoes"><button class="pri" id="btFecharPersonalizar">Pronto</button></div>
+  </div></div>
+  <div id="conquistasTela" class="tela"><div>
+    <h1>🏆 Conquistas</h1><p class="sub" id="conquistasResumo"></p>
+    <div class="trofeus" id="trofeus"></div>
+    <div class="botoes"><button class="pri" id="btFecharConquistas">Fechar</button></div>
+  </div></div>
+  <div id="toast"></div>
 </main>
 
 <aside>
+  <section id="perfil">
+    <div class="perfil-topo"><canvas id="avatar"></canvas>
+      <div><div class="perfil-nome" id="perfilNome">Jogador</div>
+        <div class="perfil-nivel">Nível <span id="perfilNivel">1</span> · <span id="perfilTitulo">Iniciante</span></div></div></div>
+    <div class="xp"><i id="xpBarra"></i></div>
+    <p class="sub" id="xpTexto">0 / 150 XP</p>
+    <div class="linha"><button id="btPersonalizar">🎨 Personalizar</button><button id="btConquistas">🏆 <span id="nConquistas">0</span></button></div>
+  </section>
+
   <section>
     <h2>Haltere</h2>
     <div class="linha">
@@ -90,6 +200,14 @@
       <button id="btSimular">Modo simulado</button>
     </div>
     <p class="sub" id="status">Desconectado</p>
+  </section>
+
+  <section>
+    <h2>Feedback sonoro</h2>
+    <label><span>Sons de acerto e erro</span><input type="checkbox" id="somLigado"></label>
+    <label><span>Voz (“Muito bem!”, “Mais devagar”)</span><input type="checkbox" id="vozLigada"></label>
+    <label><span>Volume</span><input type="range" id="volume" min="0" max="100" step="5"></label>
+    <div class="linha"><button id="btTestarSom">▶ Testar sons</button></div>
   </section>
 
   <section>
@@ -152,7 +270,8 @@ for (let n = 1; n <= cfg.series; n++) plano.push({ n, braco: cfg.ordem }, { n, b
 const amplitudes = { saudavel: { min: cfg.min, max: cfg.max }, afetado: { min: cfg.min, max: cfg.max } };
 
 // ===================== ESTADO =====================
-let estado = 'aguardando';                  // aguardando | jogando | intervalo | fim
+let estado = 'aguardando';                  // aguardando | ajuste | jogando | intervalo | fim
+let estadoAntesAjuste = null, iniciando = false;
 let etapa = 0, serieId = null, resultados = [];
 let fonte = null, ultimoPacote = 0;         // 'haltere' | 'sim'
 let janela = [], theta = 0, vel = 0, tAnt = null;
@@ -206,10 +325,14 @@ function registrarRepeticao(t) {
   };
   reps.push(rep);
   if (serieId) enviar(`/api/series/${serieId}/reps`, rep);
-  if (noRitmo) pontos += 5;
-  if (noRitmo === null) mostrarFeedback('Boa! Continue no ritmo', 'var(--acento)');
-  else if (noRitmo) mostrarFeedback('No ritmo ✓', 'var(--ok)');
-  else mostrarFeedback(dur < T ? 'Mais devagar' : 'Mais rápido', 'var(--aviso)');
+  if (noRitmo) { pontos += 5; if (++sequenciaRitmo >= 5) conquistar('no_compasso'); }
+  else if (noRitmo === false) sequenciaRitmo = 0;
+  if (noRitmo === null) { mostrarFeedback('Boa! Continue no ritmo', 'var(--acento)'); SONS.ritmoOk(); falar('Boa! Continue no ritmo'); }
+  else if (noRitmo) { mostrarFeedback('No ritmo ✓', 'var(--ok)'); SONS.ritmoOk(); falar(ELOGIOS[reps.length % ELOGIOS.length]); }
+  else {
+    const dica = dur < T ? 'Mais devagar' : 'Mais rápido';
+    mostrarFeedback(dica, 'var(--aviso)'); SONS.foraRitmo(); falar(dica, true);
+  }
   tUltimaRep = t; repMin = repMax = theta; velPico = 0;
   if (cfg.reps && reps.length >= cfg.reps) encerrarSerie();  // atingiu as repetições da série
 }
@@ -293,21 +416,66 @@ function prepararEtapa() {
     `<li class="${i === etapa && estado !== 'fim' ? 'atual' : i < etapa ? 'feita' : ''}">${i === etapa && estado !== 'fim' ? '▶ ' : ''}Série ${e.n} · ${NOME[e.braco]}</li>`).join('');
 }
 
+// Antes de cada série: tela de aviso para conferir/ajustar as posições baixa e alta do braço da vez
+function pedirAjuste() {
+  if (!fonte) return alert('Conecte o haltere ou use o modo simulado.');
+  if (estado === 'jogando' || estado === 'fim' || estado === 'ajuste') return;
+  estadoAntesAjuste = estado; estado = 'ajuste';
+  const { n, braco } = atual();
+  $('ajusteTitulo').innerHTML = `Série ${n} · <span class="braco ${braco}">${NOME[braco]}</span>`;
+  $('ajMin').value = cfg.min; $('ajMax').value = cfg.max;
+  $('intervalo').classList.remove('on'); $('ajuste').classList.add('on');
+  $('btIniciar').disabled = true;
+  atualizarAjuste();
+}
+function atualizarAjuste() {
+  if (estado !== 'ajuste') return;
+  const semDados = !fonte || performance.now() - ultimoPacote > 300;
+  $('ajusteTheta').textContent = semDados ? '–' : theta.toFixed(0);
+  // régua de −180° a 180°: faixa verde entre as posições, ponteiro no ângulo atual
+  const pos = th => Math.min(100, Math.max(0, (th + 180) / 3.6));
+  const a = pos(Math.min(cfg.min, cfg.max)), b = pos(Math.max(cfg.min, cfg.max));
+  $('reguaFaixa').style.left = a + '%'; $('reguaFaixa').style.width = (b - a) + '%';
+  $('reguaPonteiro').style.left = pos(theta) + '%'; $('reguaPonteiro').style.display = semDados ? 'none' : '';
+  const amp = Math.abs(cfg.max - cfg.min);
+  const msg = semDados ? '📡 Sem dados do haltere: verifique a conexão antes de começar.'
+    : amp < 10 ? `A distância entre as posições baixa e alta é de só ${amp}°: marque as duas posições.` : '';
+  $('ajusteAviso').textContent = msg;
+  $('btConfirmarAjuste').disabled = iniciando || semDados || amp < 10;
+}
+function cancelarAjuste() {
+  if (estado !== 'ajuste') return;
+  estado = estadoAntesAjuste; $('ajuste').classList.remove('on'); $('btIniciar').disabled = false;
+  if (estado === 'intervalo') $('intervalo').classList.add('on');
+}
+
 async function iniciarSerie() {
   if (!fonte) return alert('Conecte o haltere ou use o modo simulado.');
-  if (estado === 'jogando' || estado === 'fim') return;
+  if (estado !== 'ajuste') return pedirAjuste();             // sempre passa pelo aviso de ajuste
+  if (iniciando) return;
+  iniciando = true;
+  try { await comecarSerie(); } finally { iniciando = false; }
+}
+
+async function comecarSerie() {
+  $('ajuste').classList.remove('on');
   const { n, braco } = atual();
   $('btIniciar').disabled = true;
   if (cfg.sessao) {
     const r = await enviar(`/api/sessions/${cfg.sessao}/series`, { n, braco, cadencia: cfg.cadencia, amp_min: cfg.min, amp_max: cfg.max });
-    if (!r) { $('btIniciar').disabled = false; return alert('Não foi possível registrar a série. Verifique se a sessão ainda está aberta na plataforma.'); }
+    if (!r) {
+      alert('Não foi possível registrar a série. Verifique se a sessão ainda está aberta na plataforma.');
+      $('ajuste').classList.add('on'); return;              // continua na tela de ajuste
+    }
     serieId = r.id;
   }
   estado = 'jogando';
   canos = []; proxCano = 1; proxTipo = 'alto'; pontos = passados = totalCanos = 0; tJogo = 0;
   reps = []; tUltimaRep = null; repMin = repMax = theta; velPico = 0;
+  combo = 0; sequenciaRitmo = 0; efeitos = [];
   fase = progresso(theta) > 0.5 ? 'alto' : 'baixo';
-  $('intervalo').classList.remove('on'); $('btEncerrar').disabled = false;
+  $('intervalo').classList.remove('on'); $('personalizar').classList.remove('on'); $('conquistasTela').classList.remove('on');
+  $('btEncerrar').disabled = false;
 }
 
 async function encerrarSerie() {
@@ -320,6 +488,12 @@ async function encerrarSerie() {
     ritmo: avaliadas.length ? avaliadas.filter(x => x.no_ritmo).length / avaliadas.length : null,
     amplitude: reps.length ? reps.reduce((a, x) => a + x.amplitude, 0) / reps.length : null, score: null,
   };
+  // Conquistas da série (o XP vem do Score Geral, calculado pelo backend logo abaixo)
+  r.xp = cfg.sessao ? null : 0;
+  if (reps.length) conquistar('primeiro_voo');
+  if (avaliadas.length >= 5 && avaliadas.every(x => x.no_ritmo)) conquistar('ritmo_perfeito');
+  if (totalCanos >= 8 && passados === totalCanos) conquistar('sem_arranhoes');
+  salvarJogador();
   resultados.push(r);
   etapa++;
   const ultima = etapa >= plano.length;
@@ -327,7 +501,9 @@ async function encerrarSerie() {
   if (serieId) {                                             // salva tudo antes de fechar a série
     await enviarBrutos(); await Promise.allSettled(pendentes);
     const fim = await enviar(`/api/series/${serieId}/end`, { duracao_s: Math.round(tJogo), obstaculos: r.obstaculos, pontuacao: pontos });
-    r.score = fim?.score_geral ?? null; serieId = null;
+    r.score = fim?.score_geral ?? null; r.notas = fim?.notas || null; serieId = null;
+    r.xp = r.score == null ? 0 : Math.round(r.score);            // XP da série = Score Geral (0 a 100)
+    ganharXp(r.xp); salvarJogador();
     if (!ultima && estado === 'intervalo') mostrarIntervalo(r);
   }
   if (ultima) finalizarSessao();
@@ -339,11 +515,14 @@ function mostrarIntervalo(r) {
   $('intervaloTxt').innerHTML = `
     <p class="rotulo">Série ${r.n} · ${NOME[r.braco]} concluída</p>
     <div class="placar medio">${r.pontos}</div><div class="pontos-rotulo">pontos</div>
+    <p class="ganho-xp">${r.xp == null ? 'Calculando o Score Geral…' : `+${r.xp} XP pelo Score Geral da série · Nível ${nivelDe(jogador.xp)}`}</p>
+    ${r.notas ? `<p class="sub">${[['trajetoria', 'Trajetória'], ['estabilidade', 'Estabilidade'], ['suavidade', 'Suavidade']]
+      .filter(([k]) => r.notas[k] != null).map(([k, n]) => `${n} <b>${Math.round(r.notas[k])}</b>`).join(' · ')}</p>` : ''}
     <p class="sub">${r.reps} repetições · ${r.ritmo == null ? '–' : Math.round(r.ritmo * 100) + ' %'} no ritmo
-      · obstáculos ${r.obstaculos}${r.score != null ? ` · score de movimento <b>${Math.round(r.score)}</b>` : ''}</p>
+      · obstáculos ${r.obstaculos}</p>
     <h1 style="margin-top:22px">Próxima: Série ${prox.n} · <span class="braco ${prox.braco}">${NOME[prox.braco]}</span></h1>
-    <p class="sub">${prox.braco !== r.braco ? '🔄 Passe o haltere para a outra mão. ' : ''}Descanse e toque em começar quando estiver pronto.</p>
-    <div class="botoes"><button class="pri" onclick="iniciarSerie()">Começar próxima série</button>
+    <p class="sub">${prox.braco !== r.braco ? '🔄 Passe o haltere para a outra mão. ' : ''}Descanse e, quando estiver pronto, ajuste os ângulos para começar.</p>
+    <div class="botoes"><button class="pri" onclick="pedirAjuste()">Ajustar ângulos e começar</button>
       <button onclick="finalizarSessao()">Encerrar sessão agora</button></div>`;
   $('intervalo').classList.add('on');
   $('btIniciar').disabled = false;
@@ -352,12 +531,26 @@ function mostrarIntervalo(r) {
 async function finalizarSessao() {
   if (estado === 'fim') return;
   estado = 'fim';
-  $('intervalo').classList.remove('on'); $('btIniciar').disabled = true; $('btEncerrar').disabled = true;
+  $('intervalo').classList.remove('on'); $('ajuste').classList.remove('on'); $('btIniciar').disabled = true; $('btEncerrar').disabled = true;
   prepararEtapa();
+  // Conquistas da sessão
+  const repsSessao = resultados.reduce((a, r) => a + r.reps, 0);
+  if (resultados.length) {
+    if (resultados.some(r => r.braco === 'saudavel') && resultados.some(r => r.braco === 'afetado')) conquistar('dupla');
+    if (resultados.reduce((a, r) => a + r.pontos, 0) >= 1000) conquistar('pontuador');
+    const repsTotal = jogador.estatisticas.reps_total + repsSessao;
+    if (repsTotal >= 100) conquistar('cem_reps');
+    if (repsTotal >= 500) conquistar('quinhentas_reps');
+    if (jogador.estatisticas.sessoes + 1 >= 5) conquistar('constancia');
+    if (!cfg.sessao) { jogador.estatisticas.reps_total += repsSessao; jogador.estatisticas.sessoes++; }
+  }
+  salvarJogador();
   mostrarFinal(null);
   if (cfg.sessao) {
     await enviarBrutos(); await Promise.allSettled(pendentes);
-    mostrarFinal(await enviar(`/api/sessions/${cfg.sessao}/end`, {}));
+    const resumo = await enviar(`/api/sessions/${cfg.sessao}/end`, {});
+    if (resumo?.simetria?.excursao_pct >= 90) { conquistar('superacao'); salvarJogador(); }
+    mostrarFinal(resumo);
   }
 }
 
@@ -378,6 +571,7 @@ function mostrarFinal(resumo) {
       <div class="linha-m">Score de movimento <b>${score == null ? (resumo === null && cfg.sessao ? 'calculando…' : '–') : Math.round(score) + ' / 100'}</b></div></div>`;
   };
   const sim = resumo?.simetria;
+  const nv = nivelDe(jogador.xp), base = limiarNivel(nv), prox = limiarNivel(nv + 1);
   $('finalTxt').innerHTML = `
     <p class="rotulo">Sessão concluída!</p>
     <div class="estrelas">${[1, 2, 3].map(i => `<span class="${i > estrelas ? 'apagada' : ''}">⭐</span>`).join('')}</div>
@@ -385,8 +579,16 @@ function mostrarFinal(resumo) {
     <div class="pontos-rotulo">pontos no total</div>
     <div class="cartoes">${cartao(cfg.ordem)}${cartao(outro(cfg.ordem))}</div>
     ${sim?.excursao_pct != null ? `<p class="destaque-simetria">O braço afetado alcançou <b>${Math.round(sim.excursao_pct)} %</b> da amplitude do braço saudável</p>` : ''}
+    <div class="xp-final">
+      <div><b>Nível ${nv}</b> · ${titulo(nv)} <span class="ganho-xp">+${xpSessao} XP nesta sessão (soma do Score Geral das séries)</span></div>
+      <div class="xp grande"><i id="xpFinal"></i></div>
+      <div class="sub">${jogador.xp - base} / ${prox - base} XP para o nível ${nv + 1}</div>
+    </div>
+    ${novasConquistas.length ? `<p class="rotulo" style="margin-top:14px">Novas conquistas</p>
+      <div class="medalhas">${novasConquistas.map((c, i) => `<div class="medalha-nova" style="animation-delay:${0.2 + i * 0.15}s"><span style="font-size:24px">${c.icone}</span><b>${c.nome}</b></div>`).join('')}</div>` : ''}
     <div class="botoes"><button class="pri" onclick="voltar()">${cfg.sessao ? 'Ver análise na plataforma' : 'Jogar de novo'}</button></div>`;
   $('final').classList.add('on');
+  requestAnimationFrame(() => requestAnimationFrame(() => { $('xpFinal').style.width = `${100 * (jogador.xp - base) / (prox - base)}%`; }));
   contarAte($('placar'), total);
 }
 function contarAte(el, valor) {                                     // anima o placar de 0 até o total
@@ -401,6 +603,303 @@ function contarAte(el, valor) {                                     // anima o p
 function voltar() {
   if (cfg.sessao) return location.href = `/#/sessao/${cfg.sessao}`;   // análise desta sessão na plataforma
   location.reload();
+}
+
+// ===================== GAMIFICAÇÃO =====================
+// Progresso por paciente: salvo no backend pela sessão (sem sessão, fica neste navegador).
+// XP = soma do Score Geral (memorial 5.10) de cada série: Nota_i = 100·(1 − Erro_medido,i / Erro_máx,i), limitada a 0–100;
+// Score = 0,30·Trajetória + 0,30·Simetria + 0,25·Estabilidade + 0,15·Suavidade (calculado no backend ao encerrar a série).
+// Os pontos do jogo e as conquistas não dão XP. As conquistas premiam ritmo, controle e constância — nunca velocidade.
+const limiarNivel = n => 150 * (n - 1) + 50 * (n - 1) * (n - 2);      // XP total para chegar ao nível n
+const nivelDe = xp => { let n = 1; while (xp >= limiarNivel(n + 1)) n++; return n; };
+const TITULOS = ['Iniciante', 'Aprendiz', 'Dedicado', 'Persistente', 'Determinado', 'Craque', 'Campeão', 'Mestre do ritmo', 'Lenda'];
+const titulo = n => TITULOS[Math.min(n, TITULOS.length) - 1];
+
+const TEMAS = {
+  ceu:        { nome: 'Céu azul',         nivel: 1, ceu: ['#7dd3fc', '#e0f2fe'], chao: '#84cc16', cano: '#22c55e', deco: 'nuvens',   linha: '#0f172a' },
+  por_do_sol: { nome: 'Pôr do sol',       nivel: 2, ceu: ['#fb923c', '#fde68a'], chao: '#a16207', cano: '#8b5cf6', deco: 'sol',      linha: '#431407' },
+  floresta:   { nome: 'Floresta',         nivel: 3, ceu: ['#bbf7d0', '#f0fdf4'], chao: '#166534', cano: '#a16207', deco: 'arvores',  linha: '#052e16' },
+  oceano:     { nome: 'Fundo do mar',     nivel: 4, ceu: ['#0c4a6e', '#38bdf8'], chao: '#fcd34d', cano: '#f472b6', deco: 'bolhas',   linha: '#f0f9ff' },
+  neve:       { nome: 'Montanha de neve', nivel: 6, ceu: ['#94a3b8', '#f1f5f9'], chao: '#f8fafc', cano: '#3b82f6', deco: 'neve',     linha: '#0f172a' },
+  espaco:     { nome: 'Espaço',           nivel: 8, ceu: ['#020617', '#312e81'], chao: '#334155', cano: '#a78bfa', deco: 'estrelas', linha: '#e2e8f0' },
+};
+const PERSONAGENS = {
+  passaro: { nome: 'Pássaro', nivel: 1 }, abelha: { nome: 'Abelha', nivel: 2 }, peixe: { nome: 'Peixe', nivel: 3 },
+  foguete: { nome: 'Foguete', nivel: 5 }, dragao: { nome: 'Dragão', nivel: 7 },
+};
+const CORES = ['#facc15', '#fb923c', '#f87171', '#f472b6', '#c084fc', '#60a5fa', '#34d399', '#f5f5f4'];
+const ACESSORIOS = {
+  nenhum: { nome: 'Nenhum', nivel: 1 }, bone: { nome: 'Boné', nivel: 2 }, oculos: { nome: 'Óculos de sol', nivel: 3 },
+  laco: { nome: 'Laço', nivel: 4 }, cartola: { nome: 'Cartola', nivel: 6 },
+  coroa: { nome: 'Coroa', conquista: 'ritmo_perfeito' }, medalha: { nome: 'Medalha', conquista: 'constancia' },
+};
+const CONQUISTAS = [
+  { id: 'primeiro_voo',    icone: '🐣', nome: 'Primeiro voo',    desc: 'Conclua a primeira série' },
+  { id: 'no_compasso',     icone: '🎵', nome: 'No compasso',     desc: '5 repetições seguidas no ritmo' },
+  { id: 'ritmo_perfeito',  icone: '🎯', nome: 'Ritmo perfeito',  desc: 'Uma série inteira no ritmo (mín. 5 repetições)' },
+  { id: 'sem_arranhoes',   icone: '🛡️', nome: 'Sem arranhões',   desc: 'Uma série sem bater em nenhum obstáculo (mín. 8)' },
+  { id: 'combo_10',        icone: '🔥', nome: 'Em chamas',       desc: 'Combo de 10 obstáculos seguidos' },
+  { id: 'combo_25',        icone: '☄️', nome: 'Imparável',       desc: 'Combo de 25 obstáculos seguidos' },
+  { id: 'dupla',           icone: '🤝', nome: 'Dupla dinâmica',  desc: 'Conclua uma sessão com os dois braços' },
+  { id: 'pontuador',       icone: '⭐', nome: 'Pontuador',       desc: '1.000 pontos em uma sessão' },
+  { id: 'cem_reps',        icone: '💪', nome: 'Cem repetições',  desc: '100 repetições no total' },
+  { id: 'quinhentas_reps', icone: '🏋️', nome: 'Quinhentas',      desc: '500 repetições no total' },
+  { id: 'constancia',      icone: '📅', nome: 'Constância',      desc: '5 sessões concluídas' },
+  { id: 'superacao',       icone: '🚀', nome: 'Superação',       desc: 'Braço afetado alcança 90 % da amplitude do saudável' },
+  { id: 'veterano',        icone: '🏅', nome: 'Veterano',        desc: 'Chegue ao nível 5' },
+];
+const liberado = item => item.conquista ? !!jogador.conquistas[item.conquista] : nivelDe(jogador.xp) >= item.nivel;
+const requisito = item => item.conquista ? `Conquista “${CONQUISTAS.find(c => c.id === item.conquista).nome}”` : `Nível ${item.nivel}`;
+
+const jogador = { nome: null, xp: 0, conquistas: {}, estatisticas: { reps_total: 0, sessoes: 0 },
+                  visual: { personagem: 'passaro', cor: CORES[0], acessorio: 'nenhum', tema: 'ceu' } };
+let xpSessao = 0, novasConquistas = [], combo = 0, sequenciaRitmo = 0, percurso = 0, efeitos = [];
+const multiplicador = () => combo >= 10 ? 3 : combo >= 5 ? 2 : 1;
+
+async function carregarJogador() {
+  let d = null;
+  if (cfg.sessao) d = await fetch(`/api/sessions/${cfg.sessao}/jogador`).then(r => r.ok ? r.json() : null).catch(() => null);
+  else try { d = JSON.parse(localStorage.getItem('halter_jogador') || 'null'); } catch {}
+  if (d) {
+    jogador.nome = d.nome ?? null; jogador.xp = +d.xp || 0; jogador.conquistas = d.conquistas || {};
+    Object.assign(jogador.visual, d.visual || {}); Object.assign(jogador.estatisticas, d.estatisticas || {});
+  }
+  validarVisual(); atualizarPerfil();
+}
+function validarVisual() {                                     // itens desconhecidos ou bloqueados voltam ao padrão
+  const v = jogador.visual;
+  if (!PERSONAGENS[v.personagem] || !liberado(PERSONAGENS[v.personagem])) v.personagem = 'passaro';
+  if (!ACESSORIOS[v.acessorio] || !liberado(ACESSORIOS[v.acessorio])) v.acessorio = 'nenhum';
+  if (!TEMAS[v.tema] || !liberado(TEMAS[v.tema])) v.tema = 'ceu';
+  if (!CORES.includes(v.cor)) v.cor = CORES[0];
+}
+function salvarJogador() {
+  const dados = { xp: jogador.xp, conquistas: jogador.conquistas, visual: jogador.visual };
+  if (cfg.sessao) return fetch(`/api/sessions/${cfg.sessao}/jogador`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify(dados) }).catch(() => null);
+  try { localStorage.setItem('halter_jogador', JSON.stringify({ ...dados, estatisticas: jogador.estatisticas })); } catch {}
+}
+
+function ganharXp(qtd) {
+  if (qtd <= 0) return;
+  const antes = nivelDe(jogador.xp);
+  jogador.xp += qtd; xpSessao += qtd;
+  const depois = nivelDe(jogador.xp);
+  if (depois > antes) {
+    const novos = [PERSONAGENS, ACESSORIOS, TEMAS].flatMap(o => Object.values(o)).filter(i => i.nivel > antes && i.nivel <= depois).map(i => i.nome);
+    avisar('🆙', `Nível ${depois}! ${titulo(depois)}`, novos.length ? `Liberado: ${novos.join(', ')}` : 'Continue assim!', 'nivel');
+    if (depois >= 5) conquistar('veterano');
+  }
+  atualizarPerfil();
+}
+function conquistar(id) {
+  const c = CONQUISTAS.find(x => x.id === id);
+  if (!c || jogador.conquistas[id]) return;
+  jogador.conquistas[id] = new Date().toISOString().slice(0, 10);
+  novasConquistas.push(c);
+  const premio = Object.values(ACESSORIOS).find(a => a.conquista === id);
+  avisar(c.icone, `Conquista: ${c.nome}`, c.desc + (premio ? ` · Prêmio: ${premio.nome}` : ''), 'conquista');
+}
+
+// Avisos que deslizam no topo do jogo (um de cada vez)
+const filaAvisos = []; let avisoAtivo = false;
+function avisar(icone, tituloTxt, texto, tipo) { filaAvisos.push({ icone, tituloTxt, texto, tipo }); if (!avisoAtivo) proximoAviso(); }
+function proximoAviso() {
+  const a = filaAvisos.shift(), el = $('toast');
+  if (!a) { avisoAtivo = false; return; }
+  avisoAtivo = true;
+  el.className = a.tipo; el.innerHTML = `<span class="ic">${a.icone}</span><div><b>${a.tituloTxt}</b><span class="sub">${a.texto}</span></div>`;
+  requestAnimationFrame(() => el.classList.add('on'));
+  fanfarra();
+  setTimeout(() => { el.classList.remove('on'); setTimeout(proximoAviso, 400); }, 3200);
+}
+function fanfarra() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => bip(f), i * 90)); }
+
+function atualizarPerfil() {
+  const n = nivelDe(jogador.xp), base = limiarNivel(n), prox = limiarNivel(n + 1);
+  $('perfilNome').textContent = jogador.nome || 'Jogador';
+  $('perfilNivel').textContent = n; $('perfilTitulo').textContent = titulo(n);
+  $('xpBarra').style.width = `${100 * (jogador.xp - base) / (prox - base)}%`;
+  $('xpTexto').textContent = `${jogador.xp - base} / ${prox - base} XP para o nível ${n + 1}`;
+  $('nConquistas').textContent = `${Object.keys(jogador.conquistas).filter(id => CONQUISTAS.some(c => c.id === id)).length}/${CONQUISTAS.length}`;
+}
+function efeito(x, y, txt, cor) { efeitos.push({ x, y, txt, cor, t: 0 }); }
+
+// ---------- Desenho: cenários e personagens (sem imagens externas) ----------
+const mod = (a, b) => ((a % b) + b) % b;
+const aleat = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };   // pseudoaleatório fixo
+function escurecer(hex, f = 0.72) { const n = parseInt(hex.slice(1), 16); return `rgb(${[n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(v * f))})`; }
+
+function desenharCenario(g, w, h, tema, desloc, t) {
+  const T = TEMAS[tema] || TEMAS.ceu;
+  const ceu = g.createLinearGradient(0, 0, 0, h); ceu.addColorStop(0, T.ceu[0]); ceu.addColorStop(1, T.ceu[1]);
+  g.fillStyle = ceu; g.fillRect(0, 0, w, h);
+  const circ = (x, y, r) => { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
+  const k = h / 700;                                          // escala dos enfeites com a altura da tela
+  if (T.deco === 'nuvens') {
+    g.fillStyle = '#ffffffd9';
+    for (let i = 0; i < 7; i++) {
+      const x = mod(aleat(i) * w * 1.6 - desloc * 0.3, w + 240) - 120, y = h * (0.08 + aleat(i + 9) * 0.4), r = (18 + aleat(i + 4) * 16) * k;
+      circ(x, y, r); circ(x + r, y - r * 0.5, r * 1.2); circ(x + r * 2.2, y, r);
+    }
+  } else if (T.deco === 'sol') {
+    g.fillStyle = '#fef08acc'; circ(w * 0.72, h * 0.62, h * 0.17);
+    for (const [fator, cor] of [[0.15, '#7c2d1288'], [0.35, '#43140799']]) {
+      g.fillStyle = cor; g.beginPath(); g.moveTo(0, h);
+      for (let x = 0; x <= w + 20; x += 20) g.lineTo(x, h * (0.78 - fator * 0.2) + Math.sin((x + desloc * fator) / (90 * (1 + fator))) * 30 * k);
+      g.lineTo(w, h); g.fill();
+    }
+  } else if (T.deco === 'arvores') {
+    for (const [fator, cor, alt] of [[0.2, '#4ade8066', 0.3], [0.45, '#15803daa', 0.22]]) {
+      g.fillStyle = cor;
+      for (let i = 0; i < 14; i++) {
+        const x = mod(i * 140 - desloc * fator, w + 140) - 70, a = h * alt * (0.7 + aleat(i + fator * 10) * 0.6);
+        g.beginPath(); g.moveTo(x - 34 * k, h); g.lineTo(x, h - a); g.lineTo(x + 34 * k, h); g.fill();
+      }
+    }
+  } else if (T.deco === 'bolhas') {
+    g.strokeStyle = '#ffffff88'; g.lineWidth = 2;
+    for (let i = 0; i < 18; i++) {
+      const x = mod(aleat(i) * w - desloc * 0.15, w), y = h - mod(t * 35 * (0.5 + aleat(i + 2)) + aleat(i + 3) * h, h), r = (3 + aleat(i + 5) * 7) * k;
+      g.beginPath(); g.arc(x + Math.sin(t * 2 + i) * 6, y, r, 0, 7); g.stroke();
+    }
+    g.strokeStyle = '#16a34acc'; g.lineWidth = 6 * k;
+    for (let i = 0; i < 10; i++) {
+      const x = mod(i * 130 - desloc * 0.5, w + 130) - 60;
+      g.beginPath(); g.moveTo(x, h); g.quadraticCurveTo(x + Math.sin(t * 1.5 + i) * 18, h - 60 * k, x + Math.sin(t + i) * 10, h - 110 * k); g.stroke();
+    }
+  } else if (T.deco === 'neve') {
+    for (const [fator, cor, alt] of [[0.1, '#cbd5e1', 0.45], [0.25, '#e2e8f0', 0.3]]) {
+      g.fillStyle = cor;
+      for (let i = 0; i < 8; i++) {
+        const x = mod(i * 260 - desloc * fator, w + 260) - 130, a = h * alt * (0.7 + aleat(i + 7) * 0.5);
+        g.beginPath(); g.moveTo(x - 150 * k, h); g.lineTo(x, h - a); g.lineTo(x + 150 * k, h); g.fill();
+      }
+    }
+    g.fillStyle = '#ffffff';
+    for (let i = 0; i < 50; i++) circ(mod(aleat(i) * w + Math.sin(t + i) * 20 - desloc * 0.1, w), mod(t * 40 * (0.4 + aleat(i + 1)) + aleat(i + 2) * h, h), (1.5 + aleat(i + 3) * 2.5) * k);
+  } else if (T.deco === 'estrelas') {
+    for (let i = 0; i < 80; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.4 + 0.6 * Math.abs(Math.sin(t * (0.5 + aleat(i)) + i))})`;
+      circ(mod(aleat(i) * w * 1.3 - desloc * 0.05, w), aleat(i + 1) * h * 0.9, (0.8 + aleat(i + 2) * 1.6) * k);
+    }
+    const px = mod(w * 0.8 - desloc * 0.02, w + 200) - 100;
+    g.fillStyle = '#f472b6'; circ(px, h * 0.25, 40 * k);
+    g.strokeStyle = '#fde68acc'; g.lineWidth = 4 * k; g.beginPath(); g.ellipse(px, h * 0.25, 64 * k, 14 * k, -0.3, 0, 7); g.stroke();
+  }
+  g.fillStyle = T.chao; g.fillRect(0, h - Math.max(6, h * 0.02), w, h);
+}
+
+const OLHO = { passaro: [7, -6], abelha: [10, -5], peixe: [10, -4], foguete: [3, 0], dragao: [8, -5] };
+function desenharPersonagem(g, x, y, r, v, inclina = 0, t = performance.now() / 1000) {
+  const cor = v.cor, esc = escurecer(cor), bate = Math.sin(t * 14);
+  const circ = (cx, cy, rr) => { g.beginPath(); g.arc(cx, cy, rr, 0, 7); g.fill(); };
+  const elipse = (cx, cy, rx, ry, rot = 0) => { g.beginPath(); g.ellipse(cx, cy, rx, ry, rot, 0, 7); g.fill(); };
+  const tri = (a, b, c) => { g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.lineTo(...c); g.closePath(); g.fill(); };
+  const olho = ([ox, oy], ro = 5.5) => { g.fillStyle = '#fff'; circ(ox, oy, ro); g.fillStyle = '#111'; circ(ox + 2, oy, ro * 0.45); };
+  g.save(); g.translate(x, y); g.rotate(inclina); g.scale(r / 18, r / 18);
+  switch (v.personagem) {
+    case 'abelha':
+      g.fillStyle = '#ffffffb3'; elipse(-5, -16 - bate * 2, 8, 12, -0.3); elipse(5, -15 - bate * 2, 7, 10, 0.3);
+      g.fillStyle = '#1f2937'; tri([-20, -3], [-30, 0], [-20, 3]);
+      g.fillStyle = cor; elipse(0, 0, 22, 16);
+      g.save(); g.clip(); g.fillStyle = '#1f2937'; g.fillRect(-13, -16, 6, 32); g.fillRect(-3, -16, 6, 32); g.restore();
+      g.strokeStyle = '#1f2937'; g.lineWidth = 2; g.beginPath(); g.moveTo(12, -12); g.lineTo(16, -22); g.stroke(); g.fillStyle = '#1f2937'; circ(16, -22, 2.2);
+      olho(OLHO.abelha); break;
+    case 'peixe':
+      g.fillStyle = esc; tri([-14, 0], [-30, -12 + bate * 3], [-30, 12 + bate * 3]);
+      g.beginPath(); g.moveTo(-8, -12); g.quadraticCurveTo(0, -27, 9, -12); g.fill();
+      g.fillStyle = cor; elipse(0, 0, 22, 15);
+      g.fillStyle = esc; elipse(-2, 4, 7, 4, 0.5);
+      g.strokeStyle = '#111'; g.lineWidth = 1.5; g.beginPath(); g.arc(18, 4, 3, 0.2, 2); g.stroke();
+      olho(OLHO.peixe); break;
+    case 'foguete': {
+      const f = 10 + Math.abs(Math.sin(t * 30)) * 8;
+      g.fillStyle = '#f97316'; tri([-18, -7], [-18 - f, 0], [-18, 7]); g.fillStyle = '#fde047'; tri([-18, -4], [-18 - f * 0.6, 0], [-18, 4]);
+      g.fillStyle = esc; tri([-12, -8], [-22, -19], [-4, -9]); tri([-12, 8], [-22, 19], [-4, 9]);
+      g.fillStyle = '#e5e7eb'; elipse(0, 0, 22, 11);
+      g.fillStyle = cor; g.beginPath(); g.moveTo(12, -9); g.quadraticCurveTo(32, 0, 12, 9); g.closePath(); g.fill();
+      g.fillStyle = '#0ea5e9'; circ(3, 0, 5.5); g.strokeStyle = '#94a3b8'; g.lineWidth = 2; g.beginPath(); g.arc(3, 0, 5.5, 0, 7); g.stroke();
+      break;
+    }
+    case 'dragao':
+      g.fillStyle = esc; g.beginPath(); g.moveTo(-4, -6); g.lineTo(-20, -27 - bate * 6); g.lineTo(-2, -22 - bate * 4); g.lineTo(6, -8); g.fill();
+      g.strokeStyle = cor; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(-14, 4); g.quadraticCurveTo(-28, 12, -30, -2); g.stroke();
+      g.fillStyle = esc; tri([-30, -2], [-36, -8], [-26, -7]);
+      g.fillStyle = cor; elipse(0, 2, 19, 15); elipse(16, 0, 10, 7);
+      g.fillStyle = '#fef3c7'; elipse(3, 8, 11, 6);
+      g.fillStyle = '#fde68a'; tri([2, -11], [0, -23], [8, -12]); tri([9, -10], [12, -21], [15, -9]);
+      g.fillStyle = '#111'; circ(23, -2, 1.3);
+      olho(OLHO.dragao, 5); break;
+    default:
+      g.fillStyle = cor; circ(0, 0, 18);
+      g.fillStyle = esc; elipse(-6, 4 + bate * 3, 9, 5, -0.4);
+      g.fillStyle = '#fb923c'; tri([14, 0], [26, 4], [14, 8]);
+      olho(OLHO.passaro, 6);
+  }
+  const [ox, oy] = OLHO[v.personagem] || OLHO.passaro;
+  switch (v.acessorio) {
+    case 'bone': g.fillStyle = '#ef4444'; g.beginPath(); g.arc(3, -14, 11, Math.PI, 0); g.fill(); g.fillRect(3, -16, 19, 4); break;
+    case 'oculos':
+      g.fillStyle = '#111'; g.fillRect(ox - 7, oy - 4, 14, 8); g.fillRect(ox - 13, oy - 2, 6, 2);
+      g.fillStyle = '#ffffff66'; g.fillRect(ox - 5, oy - 3, 4, 2); break;
+    case 'laco': g.fillStyle = '#ec4899'; tri([-4, -16], [-14, -24], [-14, -8]); tri([-4, -16], [6, -24], [6, -8]); g.fillStyle = '#be185d'; circ(-4, -16, 3); break;
+    case 'cartola': g.fillStyle = '#111'; g.fillRect(-5, -38, 18, 22); g.fillRect(-10, -18, 28, 4); g.fillStyle = '#dc2626'; g.fillRect(-5, -23, 18, 4); break;
+    case 'coroa':
+      g.fillStyle = '#facc15'; g.beginPath(); g.moveTo(-7, -15); g.lineTo(-7, -28); g.lineTo(-1, -21); g.lineTo(4, -31); g.lineTo(9, -21);
+      g.lineTo(15, -28); g.lineTo(15, -15); g.closePath(); g.fill(); g.fillStyle = '#ef4444'; circ(4, -19, 2.2); break;
+    case 'medalha':
+      g.strokeStyle = '#2563eb'; g.lineWidth = 3; g.beginPath(); g.moveTo(-5, 3); g.lineTo(2, 12); g.lineTo(9, 3); g.stroke();
+      g.fillStyle = '#fbbf24'; circ(2, 15, 5.5); g.fillStyle = '#f59e0b'; circ(2, 15, 2.5); break;
+  }
+  g.restore();
+}
+function desenharMini(cv, v, comCenario = true) {
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext('2d'), t = performance.now() / 1000;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (comCenario) desenharCenario(g, w, h, v.tema, t * 40, t); else { g.fillStyle = '#0b1220'; g.fillRect(0, 0, w, h); }
+  desenharPersonagem(g, w / 2, h / 2 + Math.sin(t * 2) * h * 0.04, Math.min(w, h) * 0.24, v, 0, t);
+}
+
+// ---------- Telas de personalização e de conquistas ----------
+const telaAberta = id => $(id).classList.contains('on');
+function abrirPersonalizar() { if (estado === 'jogando') return; montarLoja(); $('personalizar').classList.add('on'); }
+function fecharPersonalizar() { $('personalizar').classList.remove('on'); salvarJogador(); }
+function montarLoja() {
+  const v = jogador.visual;
+  const cartoes = (tipo, lista) => Object.entries(lista).map(([k, item]) => `
+    <button class="opcao ${v[tipo] === k ? 'sel' : ''}" data-tipo="${tipo}" data-valor="${k}" ${liberado(item) ? '' : 'disabled'}>
+      <canvas class="mini" data-tipo="${tipo}" data-valor="${k}"></canvas>${item.nome}
+      ${liberado(item) ? '' : `<span class="req">🔒 ${requisito(item)}</span>`}</button>`).join('');
+  $('lojaOpcoes').innerHTML = `
+    <h2>Personagem</h2><div class="opcoes">${cartoes('personagem', PERSONAGENS)}</div>
+    <h2>Cor</h2><div class="opcoes">${CORES.map(c => `<button class="cor ${v.cor === c ? 'sel' : ''}" data-tipo="cor" data-valor="${c}" style="background:${c}" aria-label="cor ${c}"></button>`).join('')}</div>
+    <h2>Acessório</h2><div class="opcoes">${cartoes('acessorio', ACESSORIOS)}</div>
+    <h2>Cenário</h2><div class="opcoes">${cartoes('tema', TEMAS)}</div>`;
+  $('previaNome').textContent = `${PERSONAGENS[v.personagem].nome} · ${TEMAS[v.tema].nome}`;
+  document.querySelectorAll('#lojaOpcoes [data-valor]:not(canvas)').forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    jogador.visual[b.dataset.tipo] = b.dataset.valor; bip(740); montarLoja();
+  });
+}
+function desenharLoja() {
+  desenharMini($('previa'), jogador.visual);
+  document.querySelectorAll('#lojaOpcoes canvas.mini').forEach(c =>
+    desenharMini(c, { ...jogador.visual, [c.dataset.tipo]: c.dataset.valor }, c.dataset.tipo === 'tema'));
+}
+function abrirConquistas() {
+  if (estado === 'jogando') return;
+  const n = CONQUISTAS.filter(c => jogador.conquistas[c.id]).length;
+  $('conquistasResumo').textContent = `${n} de ${CONQUISTAS.length} desbloqueadas`;
+  $('trofeus').innerHTML = CONQUISTAS.map(c => {
+    const data = jogador.conquistas[c.id];
+    return `<div class="trofeu ${data ? 'ganho' : 'bloq'}"><span class="ic">${c.icone}</span>
+      <div><b>${c.nome}</b><span>${c.desc}${data ? ` · ${data.split('-').reverse().join('/')}` : ''}</span></div></div>`;
+  }).join('');
+  $('conquistasTela').classList.add('on');
 }
 
 // ===================== JOGO =====================
@@ -424,14 +923,27 @@ function atualizar(dt) {
   proxCano -= dt;
   if (proxCano <= 0) { criarCano(); proxCano += periodo() / 2; } // um cano a cada meia repetição
   const p = passaro(), gap = H * 0.34;
+  percurso += vx * dt;
+  for (const e of efeitos) e.t += dt;
+  efeitos = efeitos.filter(e => e.t < 0.9);
   for (const c of canos) {
     c.x -= vx * dt;
     c.yAbre = yDe(c.tipo === 'alto' ? cfg.max : cfg.min);   // segue ajustes de amplitude
     const sobrepoe = c.x < p.x + p.r * 0.6 && c.x + LARG > p.x - p.r * 0.6;
-    if (sobrepoe && Math.abs(p.y - c.yAbre) > gap / 2 - p.r * 0.6) c.bateu = true;
+    if (sobrepoe && !c.bateu && Math.abs(p.y - c.yAbre) > gap / 2 - p.r * 0.6) {
+      c.bateu = true; SONS.erro(); efeito(p.x + 10, p.y - 24, '✕', '#ef4444');   // som de erro no momento da batida
+    }
     if (!c.contado && c.x + LARG < p.x - p.r) {
       c.contado = true; totalCanos++;
-      if (!c.bateu) { passados++; pontos += 10; bip(880); } else bip(220);
+      if (!c.bateu) {
+        passados++; combo++;
+        const ganho = 10 * multiplicador();
+        pontos += ganho; efeito(p.x + 10, p.y - 24, `+${ganho}`, multiplicador() > 1 ? '#fb923c' : '#facc15');
+        SONS.acerto(combo);
+        if (combo === 5 || combo === 10) mostrarFeedback(`🔥 Combo! Pontos ×${multiplicador()}`, '#fb923c');
+        if (combo >= 10) conquistar('combo_10');
+        if (combo >= 25) conquistar('combo_25');
+      } else { if (combo >= 5) mostrarFeedback('Combo perdido', 'var(--aviso)'); combo = 0; }
     }
   }
   canos = canos.filter(c => c.x > -LARG);
@@ -439,19 +951,17 @@ function atualizar(dt) {
 }
 
 function desenhar() {
-  const g = ctx;
-  // Céu e chão
-  const ceu = g.createLinearGradient(0, 0, 0, H);
-  ceu.addColorStop(0, '#7dd3fc'); ceu.addColorStop(1, '#e0f2fe');
-  g.fillStyle = ceu; g.fillRect(0, 0, W, H);
-  g.fillStyle = '#a3e635'; g.fillRect(0, H - 14, W, 14);
+  const g = ctx, T = TEMAS[jogador.visual.tema] || TEMAS.ceu, t = performance.now() / 1000;
+  // Cenário escolhido (céu, enfeites com profundidade e chão)
+  desenharCenario(g, W, H, jogador.visual.tema, percurso, t);
 
   // Linhas de referência das posições alta e baixa
-  g.setLineDash([4, 6]); g.strokeStyle = '#0f172a33'; g.lineWidth = 1;
+  g.setLineDash([4, 6]); g.strokeStyle = T.linha; g.globalAlpha = 0.3; g.lineWidth = 1;
   for (const [th, txt] of [[cfg.max, 'alto'], [cfg.min, 'baixo']]) {
     g.beginPath(); g.moveTo(0, yDe(th)); g.lineTo(W, yDe(th)); g.stroke();
-    g.fillStyle = '#0f172a88'; g.font = '12px system-ui'; g.fillText(txt, 8, yDe(th) - 6);
+    g.globalAlpha = 0.6; g.fillStyle = T.linha; g.font = '12px system-ui'; g.fillText(txt, 8, yDe(th) - 6); g.globalAlpha = 0.3;
   }
+  g.globalAlpha = 1;
 
   // Trilha ideal: liga as aberturas dos canos e mostra o ritmo esperado
   const p = passaro();
@@ -466,7 +976,7 @@ function desenhar() {
   // Canos
   const gap = H * 0.34;
   for (const c of canos) {
-    const cor = c.bateu ? '#ef4444' : c.contado ? '#16a34a' : '#22c55e';
+    const cor = c.bateu ? '#ef4444' : c.contado ? escurecer(T.cano, 0.8) : T.cano;
     g.fillStyle = cor;
     g.fillRect(c.x, -10, LARG, c.yAbre - gap / 2 + 10);
     g.fillRect(c.x, c.yAbre + gap / 2, LARG, H);
@@ -475,15 +985,13 @@ function desenhar() {
     g.fillRect(c.x - 4, c.yAbre + gap / 2, LARG + 8, 14);
   }
 
-  // Pássaro (inclina conforme a velocidade do movimento)
-  g.save(); g.translate(p.x, p.y);
-  g.rotate(Math.max(-0.6, Math.min(0.6, -vel * Math.sign(cfg.max - cfg.min) / 200)));
-  g.fillStyle = '#facc15'; g.beginPath(); g.arc(0, 0, p.r, 0, 7); g.fill();
-  g.fillStyle = '#f59e0b'; g.beginPath(); g.ellipse(-6, 4, 9, 5, -0.4, 0, 7); g.fill();        // asa
-  g.fillStyle = '#fff'; g.beginPath(); g.arc(7, -6, 6, 0, 7); g.fill();
-  g.fillStyle = '#111'; g.beginPath(); g.arc(9, -6, 2.5, 0, 7); g.fill();
-  g.fillStyle = '#fb923c'; g.beginPath(); g.moveTo(14, 0); g.lineTo(26, 4); g.lineTo(14, 8); g.fill(); // bico
-  g.restore();
+  // Personagem do jogador (inclina conforme a velocidade do movimento)
+  desenharPersonagem(g, p.x, p.y, p.r, jogador.visual, Math.max(-0.6, Math.min(0.6, -vel * Math.sign(cfg.max - cfg.min) / 200)), t);
+
+  // Pontos ganhos subindo e sumindo
+  g.font = 'bold 20px system-ui'; g.textAlign = 'center';
+  for (const e of efeitos) { g.globalAlpha = 1 - e.t / 0.9; g.fillStyle = e.cor; g.fillText(e.txt, e.x, e.y - e.t * 50); }
+  g.globalAlpha = 1; g.textAlign = 'left';
 
   // Metrônomo: pulsa a cada meia repetição
   if (estado === 'jogando') {
@@ -502,11 +1010,15 @@ function quadro(agora) {
   if (estado === 'jogando' && semDados) aviso('📡 Sinal do haltere perdido<br><span class="sub">Feedback pausado — verifique a conexão</span>');
   else if (estado === 'aguardando' && semDados) aviso(fonte ? '📡 Aguardando dados do haltere…<br><span class="sub">Ligue o haltere e aguarde a conexão Bluetooth</span>' : 'Conecte o haltere ou use o modo simulado');
   else if (estado === 'aguardando') aviso(`<h1>Série ${atual().n} · <span class="braco ${atual().braco}">${NOME[atual().braco]}</span></h1>
-    <span class="sub">Ajuste cadência e amplitude no painel e toque em <b>Iniciar série</b></span>`);
+    <span class="sub">Ajuste a cadência no painel e toque em <b>Iniciar série</b>: antes de começar, você vai ajustar os ângulos</span>`);
   else aviso('');
   if (estado === 'jogando' && !semDados) atualizar(dt);
+  else percurso += W * 0.04 * dt;                                // cenário passa devagar fora da série
   desenhar();
+  desenharMini($('avatar'), jogador.visual, false);
+  if (telaAberta('personalizar')) desenharLoja();
   atualizarHud();
+  atualizarAjuste();
   requestAnimationFrame(quadro);
 }
 
@@ -535,16 +1047,61 @@ function atualizarHud() {
   const av = reps.filter(r => r.no_ritmo !== null);
   $('hRitmo').textContent = av.length ? Math.round(100 * av.filter(r => r.no_ritmo).length / av.length) + ' %' : '–';
   $('thetaAtual').textContent = fonte ? theta.toFixed(1) : '–';
+  $('chipCombo').style.display = estado === 'jogando' && combo >= 2 ? '' : 'none';
+  $('hCombo').textContent = combo; $('hMult').textContent = multiplicador();
+  $('btPersonalizar').disabled = $('btConquistas').disabled = estado === 'jogando';
 }
+// ===================== FEEDBACK SONORO =====================
+// Sons sintetizados (Web Audio) e voz opcional (síntese de fala do navegador). Preferências guardadas neste computador.
+const som = { ligado: true, voz: false, volume: 0.7 };
+try { Object.assign(som, JSON.parse(localStorage.getItem('halter_som') || '{}')); } catch {}
+const salvarSom = () => { try { localStorage.setItem('halter_som', JSON.stringify(som)); } catch {} };
 let audio;
-function bip(freq) {
-  try {
-    audio ??= new AudioContext();
-    const o = audio.createOscillator(), v = audio.createGain();
-    o.frequency.value = freq; v.gain.setValueAtTime(0.12, audio.currentTime);
-    v.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.15);
-    o.connect(v).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.15);
-  } catch {}
+function contextoAudio() {
+  try { audio ??= new AudioContext(); if (audio.state === 'suspended') audio.resume(); return audio; } catch { return null; }
+}
+// Uma nota com envelope suave; "ate" faz a frequência deslizar (glissando)
+function nota(freq, { ate = freq, dur = 0.15, tipo = 'sine', vol = 0.15, atraso = 0 } = {}) {
+  if (!som.ligado || som.volume <= 0) return;
+  const a = contextoAudio(); if (!a) return;
+  const t0 = a.currentTime + atraso, o = a.createOscillator(), v = a.createGain();
+  o.type = tipo; o.frequency.setValueAtTime(freq, t0);
+  if (ate !== freq) o.frequency.exponentialRampToValueAtTime(ate, t0 + dur);
+  v.gain.setValueAtTime(0.0001, t0);
+  v.gain.exponentialRampToValueAtTime(vol * som.volume, t0 + 0.012);
+  v.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(v).connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.03);
+}
+function bip(freq) { nota(freq, { tipo: 'triangle', vol: 0.12 }); }
+const SONS = {
+  // passou pelo obstáculo: duas notas subindo; o tom sobe junto com o combo
+  acerto: (combo = 0) => { const k = Math.pow(2, Math.min(combo, 12) / 24);
+    nota(784 * k, { dur: 0.09, tipo: 'triangle' }); nota(1175 * k, { dur: 0.16, tipo: 'triangle', atraso: 0.07 }); },
+  // bateu no obstáculo: tom grave descendo (suave, sem ser estridente)
+  erro: () => { nota(260, { ate: 150, dur: 0.28, tipo: 'sawtooth', vol: 0.06 }); nota(140, { ate: 90, dur: 0.32, vol: 0.2 }); },
+  // repetição no ritmo: acorde em arpejo, como um sininho
+  ritmoOk: () => [1047, 1319, 1568].forEach((f, i) => nota(f, { dur: 0.25, vol: 0.08, atraso: i * 0.06 })),
+  // repetição fora do ritmo: dois toques neutros iguais (aviso, não punição)
+  foraRitmo: () => { nota(440, { dur: 0.11, tipo: 'square', vol: 0.045 }); nota(440, { dur: 0.11, tipo: 'square', vol: 0.045, atraso: 0.16 }); },
+};
+const ELOGIOS = ['Muito bem!', 'Isso!', 'Ótimo!', 'Continue assim!', 'Boa!'];
+let ultimaFala = 0;
+function falar(texto, prioridade = false) {
+  if (!som.voz || som.volume <= 0 || !('speechSynthesis' in window)) return;
+  const agora = performance.now();
+  if (!prioridade && agora - ultimaFala < 1500) return;            // não fala em cima da fala anterior
+  ultimaFala = agora; speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = 'pt-BR'; u.rate = 1.05; u.volume = som.volume;
+  const voz = speechSynthesis.getVoices().find(v => v.lang?.toLowerCase().startsWith('pt'));
+  if (voz) u.voice = voz;
+  speechSynthesis.speak(u);
+}
+function testarSons() {
+  const ligado = som.ligado; som.ligado = true;
+  SONS.acerto(); setTimeout(() => SONS.acerto(8), 450); setTimeout(SONS.erro, 900);
+  setTimeout(SONS.ritmoOk, 1500); setTimeout(() => { SONS.foraRitmo(); som.ligado = ligado; }, 2100);
+  if (som.voz) setTimeout(() => falar('Muito bem! Mais devagar.', true), 2600);
 }
 
 // Controles do profissional — alterações valem na hora, inclusive durante a série
@@ -557,7 +1114,14 @@ function definirCadencia(v) {
 }
 function definirAmplitude(k, v) {                           // guarda na amplitude do braço da vez
   cfg[k] = v; amplitudes[atual().braco][k] = v; $(k).value = v;
+  const aj = $(k === 'min' ? 'ajMin' : 'ajMax'); if (document.activeElement !== aj) aj.value = v;
 }
+for (const [id, k] of [['ajMin', 'min'], ['ajMax', 'max']]) $(id).oninput = e => { if (e.target.value !== '') definirAmplitude(k, +e.target.value); };
+document.querySelectorAll('[data-marcar]').forEach(b => b.onclick = () => {
+  if (fonte && performance.now() - ultimoPacote <= 300) { definirAmplitude(b.dataset.marcar, Math.round(theta)); bip(660); }
+});
+$('btConfirmarAjuste').onclick = iniciarSerie;
+$('btVoltarAjuste').onclick = cancelarAjuste;
 $('cadencia').oninput = e => definirCadencia(+e.target.value);
 $('menos').onclick = () => definirCadencia(cfg.cadencia - 1);
 $('mais').onclick = () => definirCadencia(cfg.cadencia + 1);
@@ -569,6 +1133,16 @@ $('btConectar').onclick = conectar;
 $('btSimular').onclick = simular;
 $('btIniciar').onclick = iniciarSerie;
 $('btEncerrar').onclick = encerrarSerie;
+$('btPersonalizar').onclick = abrirPersonalizar;
+$('btFecharPersonalizar').onclick = fecharPersonalizar;
+$('btConquistas').onclick = abrirConquistas;
+$('btFecharConquistas').onclick = () => $('conquistasTela').classList.remove('on');
+carregarJogador();
+$('somLigado').checked = som.ligado; $('vozLigada').checked = som.voz; $('volume').value = Math.round(som.volume * 100);
+$('somLigado').onchange = e => { som.ligado = e.target.checked; salvarSom(); };
+$('vozLigada').onchange = e => { som.voz = e.target.checked; salvarSom(); if (som.voz) falar('Voz ligada', true); };
+$('volume').oninput = e => { som.volume = +e.target.value / 100; salvarSom(); };
+$('btTestarSom').onclick = testarSons;
 
 definirCadencia(cfg.cadencia);
 prepararEtapa();

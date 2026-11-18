@@ -8,117 +8,195 @@
 <style>
   :root {
     color-scheme: light;
-    --fundo:#f3f3f1; --cartao:#fcfcfb; --borda:#e4e3df; --grade:#ecebe7;
-    --txt:#0b0b0b; --txt2:#52514e; --mudo:#7b7a75; --acento:#2a78d6; --erro:#c62f2f;
+    --fundo:#f6f6f4; --cartao:#ffffff; --borda:#e8e7e3; --grade:#efeeea; --suave:#f3f3f0;
+    --txt:#111110; --txt2:#55544f; --mudo:#86857f; --acento:#2a78d6; --acento-suave:#2a78d61a; --erro:#c62f2f;
     /* paleta categórica (ordem fixa): saudável = s1 (azul), afetado = s2 (laranja) */
     --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --neutro:#9a9993;
-    --faixa-boa:#0ca30c1c;
+    --faixa-boa:#0ca30c1c; --sombra:0 1px 2px #0000000a;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --fundo:#121211; --cartao:#1a1a19; --borda:#2e2e2b; --grade:#262624;
-      --txt:#f0efec; --txt2:#c3c2b7; --mudo:#8f8e86; --acento:#3987e5; --erro:#e66767;
+      --fundo:#111110; --cartao:#1a1a19; --borda:#2a2a28; --grade:#262624; --suave:#222220;
+      --txt:#f0efec; --txt2:#c3c2b7; --mudo:#8f8e86; --acento:#3987e5; --acento-suave:#3987e526; --erro:#e66767;
       --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --neutro:#77766f;
-      --faixa-boa:#0ca30c2b;
+      --faixa-boa:#0ca30c1f; --sombra:none;
     }
   }
   /* status: cores fixas, sempre com ícone + rótulo */
   :root { --bom:#0ca30c; --atencao:#fab219; --alerta:#d03b3b; }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--fundo); color:var(--txt); font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  header { display:flex; align-items:center; gap:12px; padding:14px 24px; background:var(--cartao); border-bottom:1px solid var(--borda); }
-  header b { font-size:16px; } header span { color:var(--mudo); }
-  header button { margin-left:auto; }
-  main { max-width:1200px; margin:0 auto; padding:24px 16px 60px; }
-  h1 { margin:4px 0 6px; font-size:26px; }
-  h2 { margin:0 0 14px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--txt2); }
-  h3 { margin:0 0 4px; font-size:15px; font-weight:650; color:var(--txt); }
+  body { margin:0; background:var(--fundo); color:var(--txt); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
+
+  /* Cabeçalho fixo com a trilha de navegação */
+  header { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px; height:56px; padding:0 24px;
+           background:color-mix(in srgb, var(--cartao) 88%, transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--borda); }
+  .marca { display:flex; align-items:center; gap:8px; font-weight:700; color:var(--txt); white-space:nowrap; }
+  .marca:hover { text-decoration:none; }
+  .marca i { width:24px; height:24px; border-radius:7px; background:var(--acento); color:#fff; display:grid; place-items:center; font-style:normal; font-size:13px; }
+  .trilha { display:flex; align-items:center; gap:6px; min-width:0; font-size:14px; color:var(--mudo); }
+  .trilha a { color:var(--txt2); white-space:nowrap; }
+  .trilha b { font-weight:600; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .trilha .sep { opacity:.5; }
+  #sair { margin-left:auto; }
+
+  main { max-width:1120px; margin:0 auto; padding:28px 24px 80px; }
+  h1 { margin:0; font-size:24px; font-weight:700; letter-spacing:-.01em; }
+  h2 { margin:0 0 14px; font-size:15px; font-weight:650; color:var(--txt); }
+  h3 { margin:0 0 4px; font-size:14px; font-weight:600; color:var(--txt); }
   a { color:var(--acento); text-decoration:none; } a:hover { text-decoration:underline; }
-  .cartao { background:var(--cartao); border:1px solid var(--borda); border-radius:12px; padding:18px; margin-bottom:16px; }
   .mudo { color:var(--mudo); } .pequeno { font-size:13px; } .erro { color:var(--erro); }
-  .voltar { display:inline-block; margin-bottom:4px; font-size:14px; }
-  label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--txt2); margin-bottom:12px; }
-  input, select, textarea { width:100%; min-width:0; font:inherit; color:var(--txt); background:var(--fundo); border:1px solid var(--borda); border-radius:8px; padding:8px 10px; }
-  button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--borda); background:var(--cartao); color:var(--txt); cursor:pointer; }
+  .cartao { background:var(--cartao); border:1px solid var(--borda); border-radius:14px; padding:20px; margin-bottom:16px; box-shadow:var(--sombra); }
+  .cartao.sem-pad { padding:8px; }
+  .topo-pagina { display:flex; align-items:flex-end; justify-content:space-between; gap:12px 16px; flex-wrap:wrap; margin-bottom:22px; }
+  .topo-pagina p { margin:4px 0 0; }
+  .acoes { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .vazio { text-align:center; padding:48px 16px; color:var(--mudo); }
+
+  /* Formulários e botões */
+  label { display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--txt2); margin-bottom:14px; }
+  input, select, textarea { width:100%; min-width:0; font:inherit; color:var(--txt); background:var(--cartao); border:1px solid var(--borda); border-radius:8px; padding:8px 10px; }
+  input:focus, select:focus, textarea:focus { outline:3px solid var(--acento-suave); border-color:var(--acento); }
+  button { font:inherit; font-weight:500; padding:8px 14px; border-radius:8px; border:1px solid var(--borda); background:var(--cartao); color:var(--txt); cursor:pointer; white-space:nowrap; }
+  button:hover { background:var(--suave); }
   button.pri { background:var(--acento); border-color:var(--acento); color:#fff; font-weight:600; }
-  .dupla { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .grade2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  .grade-paciente { display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
-  .graficos { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-  .multiplos { display:grid; grid-template-columns:repeat(3,1fr); gap:22px 20px; }
-  .caixa-grafico { position:relative; height:210px; margin-top:8px; } .caixa-grafico.alto { height:290px; }
+  button.pri:hover { filter:brightness(1.08); }
+  button.fantasma { border-color:transparent; background:transparent; color:var(--txt2); }
+  button.fantasma:hover { background:var(--suave); color:var(--txt); }
+  button.perigo { color:var(--erro); }
+  button.ocupado { opacity:.6; pointer-events:none; }
+  .botoes { display:flex; gap:8px; flex-wrap:wrap; }
+  .grade-form { display:grid; grid-template-columns:repeat(6, 1fr); gap:0 12px; }
+  .grade-form .l2 { grid-column:span 2; } .grade-form .l3 { grid-column:span 3; } .grade-form .l6 { grid-column:1 / -1; }
+  .sub-cartao { background:var(--suave); border-radius:10px; padding:14px; margin:0 0 14px; }
+  .rodape-form { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:4px; }
   .login { max-width:360px; margin:60px auto; }
   .login button { width:100%; }
+
+  /* Menu "⋯" */
+  details.menu { position:relative; }
+  details.menu > summary { list-style:none; cursor:pointer; padding:8px 12px; border-radius:8px; border:1px solid var(--borda); background:var(--cartao); line-height:1.5; font-weight:700; }
+  details.menu > summary::-webkit-details-marker { display:none; }
+  details.menu > summary:hover { background:var(--suave); }
+  .menu-itens { position:absolute; right:0; top:calc(100% + 6px); z-index:15; min-width:190px; display:flex; flex-direction:column; padding:6px;
+                background:var(--cartao); border:1px solid var(--borda); border-radius:10px; box-shadow:0 10px 30px #0000001f; }
+  .menu-itens button { border:0; background:none; text-align:left; }
+  .menu-itens button:hover { background:var(--suave); }
+
+  /* Abas */
+  .barra { display:flex; align-items:center; justify-content:space-between; gap:8px 16px; flex-wrap:wrap; border-bottom:1px solid var(--borda); margin-bottom:20px; }
+  .abas { display:flex; gap:2px; overflow-x:auto; scrollbar-width:none; }
+  .abas button { border:0; border-radius:0; background:none; padding:10px 12px; margin-bottom:-1px; color:var(--mudo); font-weight:550; border-bottom:2px solid transparent; }
+  .abas button:hover { background:none; color:var(--txt); }
+  .abas button[aria-selected="true"] { color:var(--txt); border-bottom-color:var(--acento); }
+  .barra select { width:auto; margin:6px 0; padding:6px 10px; font-size:14px; }
+  .barra .rotulo-ex { font-size:14px; color:var(--txt2); padding:6px 0; }
+
+  /* Lista de pacientes */
+  .busca { margin:4px 4px 6px; width:calc(100% - 8px); }
   .lista { list-style:none; margin:0; padding:0; }
-  .lista li a { display:flex; justify-content:space-between; gap:10px; padding:12px 4px; border-bottom:1px solid var(--borda); color:var(--txt); }
-  .lista li a span { color:var(--mudo); font-size:13px; }
+  .lista li a { display:flex; align-items:center; gap:12px; padding:12px; border-radius:10px; color:var(--txt); }
+  .lista li a:hover { background:var(--suave); text-decoration:none; }
+  .avatar { flex:none; width:38px; height:38px; border-radius:50%; display:grid; place-items:center; background:var(--acento-suave); color:var(--acento); font-weight:700; font-size:13px; }
+  .lista .info { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .lista .info small { color:var(--mudo); font-size:13px; }
+  .lista .chev { color:var(--mudo); font-size:20px; }
+
+  /* Tabelas */
   table { width:100%; border-collapse:collapse; font-size:14px; font-variant-numeric:tabular-nums; }
-  th { text-align:left; font-weight:600; color:var(--txt2); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
-  th, td { padding:8px 6px; border-bottom:1px solid var(--borda); vertical-align:middle; }
+  th { text-align:left; font-weight:500; color:var(--mudo); font-size:13px; }
+  th, td { padding:10px 8px; border-bottom:1px solid var(--borda); vertical-align:middle; }
+  tr:last-child td { border-bottom:0; }
   td.num, th.num { text-align:right; }
+  .tabela-rolavel { overflow-x:auto; }
+  tr.clicavel { cursor:pointer; } tr.clicavel:hover td { background:var(--suave); }
+  .bolinha { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
   .filtros { display:flex; gap:10px; align-items:center; margin-bottom:12px; font-size:13px; color:var(--txt2); flex-wrap:wrap; }
   .filtros select { width:auto; padding:5px 8px; }
-  .titulo { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-  .titulo .acoes { margin-left:auto; display:flex; gap:8px; }
-  button.perigo { color:var(--erro); border-color:var(--erro); }
-  .botoes { display:flex; gap:8px; }
-  .sub-cartao { border:1px dashed var(--borda); border-radius:10px; padding:12px; margin:-4px 0 12px; }
-  .bolinha { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
-  .foco { text-transform:none; letter-spacing:0; color:var(--txt); }
-  details > summary { cursor:pointer; color:var(--acento); font-size:15px; font-weight:600; }
-  details[open] > summary { margin-bottom:14px; }
 
   /* Status (semáforo) */
-  .status { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:650; color:var(--txt);
-            padding:2px 9px 2px 3px; border-radius:999px; border:1px solid var(--borda); white-space:nowrap; }
+  .status { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:var(--txt);
+            padding:2px 9px 2px 3px; border-radius:999px; background:var(--cartao); border:1px solid var(--borda); white-space:nowrap; }
   .status i { font-style:normal; width:17px; height:17px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:11px; }
   .status.bom i { background:var(--bom); } .status.atencao i { background:var(--atencao); color:#0b0b0b; } .status.alerta i { background:var(--alerta); }
   .status.sem { color:var(--mudo); padding-left:9px; }
 
+  /* Destaque do score (situação atual e sessão) */
+  .destaque { display:flex; align-items:center; gap:16px 32px; flex-wrap:wrap; }
+  .destaque .numero { font-size:44px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .destaque .numero small { font-size:16px; font-weight:500; color:var(--mudo); letter-spacing:0; }
+  .destaque .extra { display:flex; flex-direction:column; align-items:flex-start; gap:4px; font-size:14px; color:var(--txt2); }
+  .destaque .link { margin-left:auto; font-weight:600; }
+
   /* Resumo da sessão */
-  .resumo { display:grid; grid-template-columns:260px 1fr; gap:24px; }
-  .score .valor { font-size:60px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; margin:6px 0; }
+  .resumo { display:grid; grid-template-columns:240px 1fr; gap:28px; }
+  .score .valor { font-size:56px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; margin:8px 0; letter-spacing:-.02em; }
   .score .valor small { font-size:18px; font-weight:500; color:var(--mudo); }
-  .medidor { height:8px; border-radius:4px; background:var(--grade); margin-top:10px; overflow:hidden; }
-  .medidor i { display:block; height:100%; border-radius:4px; }
+  .medidor { height:6px; border-radius:3px; background:var(--grade); margin-top:10px; overflow:hidden; }
+  .medidor i { display:block; height:100%; border-radius:3px; }
   .notas-texto { list-style:none; margin:0; padding:0; }
-  .notas-texto li { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--borda); }
-  .notas-texto li:last-child { border-bottom:0; }
-  .notas-texto .icone { flex:0 0 22px; height:22px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:12px; font-weight:700; }
+  .notas-texto li { display:flex; gap:10px; padding:8px 0; }
+  .notas-texto .icone { flex:0 0 20px; height:20px; margin-top:1px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:11px; font-weight:700; }
   .icone.alerta { background:var(--alerta); } .icone.atencao { background:var(--atencao); color:#0b0b0b; } .icone.bom { background:var(--bom); }
 
   /* Indicadores */
   .indicadores { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
-  .ind.largo { grid-column:1 / -1; flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px 18px; }
-  .serie-fadiga { display:grid; grid-template-columns:1.7fr 1fr; gap:20px; align-items:start; }
-  .serie-fadiga td, .serie-fadiga th { white-space:nowrap; padding:8px 5px; }
-  .ind { border:1px solid var(--borda); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:4px; }
-  .ind .topo { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-  .ind .nome { font-weight:650; }
-  .ind .pergunta { font-size:13px; color:var(--mudo); }
-  .ind .valor { font-size:20px; font-weight:750; margin-top:4px; font-variant-numeric:tabular-nums; }
-  .ind .detalhe { font-size:13px; color:var(--txt2); }
-  .ind .tendencia { font-size:13px; color:var(--txt2); margin-top:2px; }
+  .ind { background:var(--cartao); border:1px solid var(--borda); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:3px; box-shadow:var(--sombra); }
+  .ind .topo { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .ind .nome { font-weight:600; font-size:14px; color:var(--txt2); display:flex; align-items:center; gap:6px; }
+  .ind .valor { font-size:19px; font-weight:700; margin-top:6px; font-variant-numeric:tabular-nums; line-height:1.3; }
+  .ind .detalhe { font-size:13px; color:var(--mudo); }
+  .ind .tendencia { font-size:13px; color:var(--txt2); margin-top:6px; }
   .seta { font-weight:800; } .seta.melhorou { color:var(--bom); } .seta.piorou { color:var(--alerta); } .seta.igual { color:var(--mudo); }
-  .ajuda { display:inline-grid; place-items:center; width:18px; height:18px; border-radius:50%; border:1px solid var(--borda);
-           font-size:11px; color:var(--txt2); cursor:help; flex:0 0 18px; }
+  .ajuda { display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; border:1px solid var(--borda);
+           font-size:10px; font-weight:600; color:var(--mudo); cursor:help; flex:0 0 16px; }
 
-  /* Gráficos com instrução de leitura */
-  .grafico-cartao h3 { display:flex; gap:8px; align-items:center; }
-  .grafico-cartao .melhor { font-size:12px; font-weight:600; color:var(--mudo); border:1px solid var(--borda); border-radius:6px; padding:0 6px; }
-  .como-ler { font-size:13px; color:var(--txt2); margin:8px 0 0; padding-left:10px; border-left:3px solid var(--borda); }
-  .glossario dt { font-weight:650; margin-top:12px; }
+  /* Gráficos */
+  .graficos { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .multiplos { display:grid; grid-template-columns:repeat(3,1fr); gap:28px 24px; }
+  .caixa-grafico { position:relative; height:210px; margin-top:10px; } .caixa-grafico.alto { height:280px; }
+  .grafico-cartao h3 { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grafico-cartao .melhor { font-size:11px; font-weight:500; color:var(--mudo); background:var(--suave); border-radius:6px; padding:1px 6px; }
+  details.como-ler { margin-top:6px; font-size:13px; color:var(--txt2); }
+  details.como-ler > summary { cursor:pointer; color:var(--mudo); font-size:12px; list-style:none; width:max-content; }
+  details.como-ler > summary::-webkit-details-marker { display:none; }
+  details.como-ler > summary::before { content:'ⓘ '; }
+  details.como-ler[open] > summary { margin-bottom:4px; }
+  .serie-fadiga { display:grid; grid-template-columns:1.6fr 1fr; gap:28px; align-items:start; }
+  .serie-fadiga td, .serie-fadiga th { white-space:nowrap; padding:9px 6px; }
+  .titulo-secao { margin:30px 0 14px; font-size:15px; font-weight:650; }
+  .tiles { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .tile { background:var(--suave); border-radius:10px; padding:10px 12px; }
+  .tile .rotulo { font-size:12px; color:var(--mudo); } .tile .valor { font-size:18px; font-weight:700; } .tile .metodo { font-size:11px; color:var(--mudo); }
+
+  /* Glossário (rodapé) */
+  details.expansivel { margin-top:28px; }
+  details.expansivel > summary { cursor:pointer; color:var(--mudo); font-size:14px; width:max-content; }
+  details.expansivel[open] > summary { margin-bottom:12px; color:var(--txt); }
+  .glossario dt { font-weight:600; margin-top:12px; }
   .glossario dd { margin:2px 0 0; color:var(--txt2); font-size:14px; }
   .glossario .faixas { font-size:13px; margin-top:4px; display:flex; gap:8px; flex-wrap:wrap; }
-  @media (max-width:900px) { .grade2, .grade-paciente, .graficos, .resumo, .serie-fadiga { grid-template-columns:1fr; } .indicadores { grid-template-columns:1fr 1fr; } .multiplos { grid-template-columns:1fr 1fr; } }
-  @media (max-width:560px) { .multiplos, .dupla, .indicadores { grid-template-columns:1fr; } main { padding:16px; } }
+
+  @media (max-width:900px) {
+    .graficos, .resumo, .serie-fadiga { grid-template-columns:1fr; }
+    .indicadores, .multiplos { grid-template-columns:1fr 1fr; }
+    .grade-form { grid-template-columns:repeat(3, 1fr); } .grade-form .l2, .grade-form .l3 { grid-column:1 / -1; }
+    .tiles { grid-template-columns:repeat(2,1fr); }
+  }
+  @media (max-width:560px) {
+    header { padding:0 16px; gap:10px; } .marca span { display:none; }
+    main { padding:20px 16px 60px; }
+    .indicadores, .multiplos { grid-template-columns:1fr; }
+    .grade-form { grid-template-columns:1fr 1fr; }
+    .destaque .link { margin-left:0; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <b>Halter Inteligente</b><span>Plataforma do profissional</span>
-  <button id="sair" hidden>Sair</button>
+  <a class="marca" href="#/"><i>H</i><span>Halter Inteligente</span></a>
+  <nav class="trilha" id="trilha" aria-label="Navegação"></nav>
+  <button id="sair" class="fantasma" hidden>Sair</button>
 </header>
 <main id="app"></main>
 
@@ -142,6 +220,32 @@ async function api(url, opcoes = {}) {
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || `erro ${r.status}`);
   return r.json();
 }
+// Trilha de navegação no cabeçalho: [[texto, link], …, [texto atual]]
+function trilha(itens = []) {
+  $('#trilha').innerHTML = itens.map(([texto, href], i) => (i ? '<span class="sep">›</span>' : '') +
+    (href ? `<a href="${href}">${esc(texto)}</a>` : `<b>${esc(texto)}</b>`)).join('');
+}
+// Abas: botões [data-aba] mostram o painel [data-painel] correspondente; a última aba aberta é lembrada
+const abaLembrada = {};
+function abas(chave, aoMostrar = {}) {
+  const botoes = [...document.querySelectorAll('.abas [data-aba]')];
+  if (!botoes.length) return;
+  const mostrar = nome => {
+    abaLembrada[chave] = nome;
+    botoes.forEach(b => b.setAttribute('aria-selected', b.dataset.aba === nome));
+    document.querySelectorAll('[data-painel]').forEach(p => { p.hidden = p.dataset.painel !== nome; });
+    [...graficos, ...graficosSinais].forEach(g => g.resize());
+    aoMostrar[nome]?.();
+  };
+  botoes.forEach(b => { b.setAttribute('role', 'tab'); b.onclick = () => mostrar(b.dataset.aba); });
+  mostrar(botoes.some(b => b.dataset.aba === abaLembrada[chave]) ? abaLembrada[chave] : botoes[0].dataset.aba);
+}
+// Fecha menus "⋯" ao clicar fora
+document.addEventListener('click', e => document.querySelectorAll('details.menu[open]').forEach(m => { if (!m.contains(e.target)) m.open = false; }));
+const iniciais = nome => String(nome).trim().split(/\s+/).filter(Boolean).map(p => p[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase();
+const idade = nasc => { if (!nasc) return null; const d = new Date(nasc + 'T00:00'), h = new Date();
+  return h.getFullYear() - d.getFullYear() - (h < new Date(h.getFullYear(), d.getMonth(), d.getDate()) ? 1 : 0); };
+
 // Envia um formulário tratando erros
 const aoEnviar = (form, acao) => form.onsubmit = async e => {
   e.preventDefault();
@@ -218,7 +322,7 @@ if (window.Chart) {
 const cartaoGrafico = (id, titulo, comoLer, { alto = false, melhor = '' } = {}) => `
   <div class="grafico-cartao"><h3>${titulo}${melhor ? `<span class="melhor">${melhor === 'maior' ? '↑ maior é melhor' : '↓ menor é melhor'}</span>` : ''}</h3>
   <div class="caixa-grafico ${alto ? 'alto' : ''}"><canvas id="${id}"></canvas></div>
-  <p class="como-ler"><b>Como ler:</b> ${comoLer}</p></div>`;
+  <details class="como-ler"><summary>Como ler</summary>${comoLer}</details></div>`;
 
 // ===================== INTERPRETAÇÃO CLÍNICA =====================
 // Faixas iniciais de interpretação (Bom / Atenção / Alerta). Devem ser revisadas com a equipe clínica.
@@ -285,9 +389,7 @@ function tendencia(atual, antes, faixa, texto) {
 
 const cartaoIndicador = (i, antes, textoTendencia) => `
   <div class="ind">
-    <div class="topo"><div><div class="nome">${i.nome}</div><div class="pergunta">${i.pergunta}</div></div>
-      <span class="ajuda" title="${esc(i.explica)}">?</span></div>
-    <div>${chip(i.nivel)}</div>
+    <div class="topo"><div class="nome">${i.nome}<span class="ajuda" title="${esc(i.pergunta + ' ' + i.explica)}">?</span></div>${chip(i.nivel)}</div>
     <div class="valor">${i.valor}</div>
     ${i.detalhe ? `<div class="detalhe">${i.detalhe}</div>` : ''}
     ${antes ? `<div class="tendencia">${tendencia(i.numero, antes.numero, i.faixa, textoTendencia)}</div>` : ''}
@@ -339,7 +441,7 @@ function interpretar(an, series, anterior) {
 // Glossário: o que cada indicador mede e como é classificado
 function glossario() {
   const ind = indicadores({});
-  return `<details class="cartao"><summary>Entenda os indicadores e as cores</summary>
+  return `<details class="expansivel"><summary>ⓘ Entenda os indicadores e as cores</summary>
     <p class="pequeno mudo">As cores comparam o braço afetado com faixas de referência e, quando possível, com o próprio braço saudável do paciente na mesma sessão.
     As faixas são valores iniciais e podem ser ajustadas pela equipe clínica.</p>
     <dl class="glossario">
@@ -351,7 +453,7 @@ function glossario() {
 
 // ===================== TELAS =====================
 function telaLogin() {
-  $('#sair').hidden = true;
+  $('#sair').hidden = true; trilha();
   app.innerHTML = `
     <form class="cartao login" id="fLogin">
       <h2>Entrar</h2>
@@ -369,25 +471,39 @@ function telaLogin() {
 }
 
 async function telaPacientes() {
+  trilha([['Pacientes']]);
   const lista = await api('/api/patients');
+  const item = p => `<li data-nome="${esc(p.nome.toLowerCase())}"><a href="#/paciente/${p.id}">
+      <span class="avatar">${esc(iniciais(p.nome))}</span>
+      <span class="info"><b>${esc(p.nome)}</b><small>${p.sessoes ? `${p.sessoes} ${p.sessoes === 1 ? 'sessão' : 'sessões'} · última em ${dataHora(p.ultima_sessao)}` : 'nenhuma sessão ainda'}</small></span>
+      <span class="chev">›</span></a></li>`;
   app.innerHTML = `
-    <h1>Pacientes</h1>
-    <div class="grade2">
-      <section class="cartao">
-        <h2>Selecionar paciente</h2>
-        ${lista.length ? `<ul class="lista">${lista.map(p => `
-          <li><a href="#/paciente/${p.id}"><b>${esc(p.nome)}</b>
-          <span>${p.sessoes} ${p.sessoes === 1 ? 'sessão' : 'sessões'} · última: ${dataHora(p.ultima_sessao)}</span></a></li>`).join('')}</ul>`
-        : '<p class="mudo">Nenhum paciente cadastrado ainda.</p>'}
-      </section>
-      <form class="cartao" id="fPaciente">
-        <h2>Novo paciente</h2>
-        <label>Nome<input name="nome" required></label>
-        <label>Data de nascimento<input name="nascimento" type="date"></label>
-        <label>Observações clínicas<textarea name="observacoes" rows="3"></textarea></label>
-        <button class="pri">Cadastrar</button>
-      </form>
-    </div>`;
+    <div class="topo-pagina">
+      <div><h1>Pacientes</h1><p class="mudo pequeno">${lista.length} ${lista.length === 1 ? 'paciente cadastrado' : 'pacientes cadastrados'}</p></div>
+      <button class="pri" id="btNovo">+ Novo paciente</button>
+    </div>
+    <form class="cartao" id="fPaciente" ${lista.length ? 'hidden' : ''}>
+      <h2>Novo paciente</h2>
+      <div class="grade-form">
+        <label class="l3">Nome<input name="nome" required></label>
+        <label class="l3">Data de nascimento<input name="nascimento" type="date"></label>
+        <label class="l6">Observações clínicas<textarea name="observacoes" rows="2" placeholder="Diagnóstico, lado afetado, cuidados…"></textarea></label>
+      </div>
+      <div class="botoes"><button class="pri">Cadastrar</button>${lista.length ? '<button type="button" class="fantasma" id="btCancelarNovo">Cancelar</button>' : ''}</div>
+    </form>
+    ${lista.length ? `<section class="cartao sem-pad">
+      ${lista.length > 4 ? '<input type="search" class="busca" id="busca" placeholder="Buscar paciente…" aria-label="Buscar paciente">' : ''}
+      <ul class="lista">${lista.map(item).join('')}</ul>
+      <p class="vazio" id="nenhum" hidden>Nenhum paciente com esse nome.</p>
+    </section>` : '<p class="vazio">Nenhum paciente cadastrado ainda.</p>'}`;
+  $('#btNovo').onclick = () => { $('#fPaciente').hidden = false; $('#fPaciente [name=nome]').focus(); };
+  if ($('#btCancelarNovo')) $('#btCancelarNovo').onclick = () => { $('#fPaciente').hidden = true; };
+  if ($('#busca')) $('#busca').oninput = e => {
+    const termo = e.target.value.trim().toLowerCase();
+    let visiveis = 0;
+    document.querySelectorAll('.lista li').forEach(li => { li.hidden = !li.dataset.nome.includes(termo); visiveis += !li.hidden; });
+    $('#nenhum').hidden = visiveis > 0;
+  };
   aoEnviar($('#fPaciente'), async dados => {
     const { id } = await api('/api/patients', { method: 'POST', body: dados });
     location.hash = `#/paciente/${id}`;
@@ -409,93 +525,123 @@ async function telaPaciente(id) {
   const opcoesExercicio = sel => exercicios.map(e =>
     `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.nome)}${e.padrao ? '' : ' (personalizada)'}</option>`).join('');
 
+  const anos = idade(p.nascimento);
+  trilha([['Pacientes', '#/'], [p.nome]]);
   app.innerHTML = `
-    <a class="voltar" href="#/">← Pacientes</a>
-    <div class="titulo">
-      <h1>${esc(p.nome)}</h1>
-      <div class="acoes"><button id="btEditar">Editar</button><button id="btExcluir" class="perigo">Excluir paciente</button></div>
+    <div class="topo-pagina">
+      <div><h1>${esc(p.nome)}</h1>
+        <p class="mudo pequeno">${[anos != null ? `${anos} anos` : '', esc(p.observacoes || '')].filter(Boolean).join(' · ') || 'Sem observações clínicas'}</p></div>
+      <div class="acoes">
+        <button class="fantasma" id="btExportar" title="Baixa um .zip com as sessões, séries, repetições e leituras do sensor em CSV, e os gráficos em PNG">⬇ Exportar dados</button>
+        <details class="menu"><summary aria-label="Mais opções" title="Mais opções">⋯</summary>
+          <div class="menu-itens"><button id="btEditar">Editar paciente</button><button id="btExcluir" class="perigo">Excluir paciente</button></div></details>
+        <button class="pri" id="btNovaSessao">+ Nova sessão</button>
+      </div>
     </div>
-    <p class="mudo">${p.nascimento ? 'Nascimento: ' + new Date(p.nascimento + 'T00:00').toLocaleDateString('pt-BR') + ' · ' : ''}${esc(p.observacoes || '')}</p>
 
     <form class="cartao" id="fEditar" hidden>
       <h2>Editar paciente</h2>
-      <div class="grade2">
-        <label>Nome<input name="nome" value="${esc(p.nome)}" required></label>
-        <label>Data de nascimento<input name="nascimento" type="date" value="${esc(p.nascimento || '')}"></label>
+      <div class="grade-form">
+        <label class="l3">Nome<input name="nome" value="${esc(p.nome)}" required></label>
+        <label class="l3">Data de nascimento<input name="nascimento" type="date" value="${esc(p.nascimento || '')}"></label>
+        <label class="l6">Observações clínicas<textarea name="observacoes" rows="2">${esc(p.observacoes || '')}</textarea></label>
       </div>
-      <label>Observações clínicas<textarea name="observacoes" rows="3">${esc(p.observacoes || '')}</textarea></label>
-      <div class="botoes"><button class="pri">Salvar</button><button type="button" id="btCancelarEdicao">Cancelar</button></div>
+      <div class="botoes"><button class="pri">Salvar</button><button type="button" class="fantasma" id="btCancelarEdicao">Cancelar</button></div>
     </form>
 
-    <div class="grade-paciente">
-      <form class="cartao" id="fSessao">
-        <h2>Nova sessão</h2>
-        <label>Exercício<select name="exercicio_id" id="selExercicio">${opcoesExercicio(foco)}
+    <form class="cartao" id="fSessao" ${sessoes.length ? 'hidden' : ''}>
+      <h2>Nova sessão</h2>
+      <div class="grade-form">
+        <label class="l3">Exercício<select name="exercicio_id" id="selExercicio">${opcoesExercicio(foco)}
           <option value="nova">+ Nova categoria…</option></select></label>
-        <div class="sub-cartao" id="novaCategoria" hidden>
-          <label>Nome da nova categoria<input id="novoNome" maxlength="60" placeholder="Ex.: Abdução horizontal de ombro"></label>
-          <label>Descrição (opcional)<input id="novaDescricao" maxlength="200" placeholder="Como o movimento é feito"></label>
-          <div class="botoes"><button type="button" class="pri" id="btCriarCategoria">Criar categoria</button>
-            <button type="button" id="btCancelarCategoria">Cancelar</button></div>
+        <label class="l3">Cada série começa pelo braço<select name="ordem">
+          <option value="saudavel">Saudável, depois o afetado</option><option value="afetado">Afetado, depois o saudável</option></select></label>
+      </div>
+      <div class="sub-cartao" id="novaCategoria" hidden>
+        <div class="grade-form">
+          <label class="l3">Nome da nova categoria<input id="novoNome" maxlength="60" placeholder="Ex.: Abdução horizontal de ombro"></label>
+          <label class="l3">Descrição (opcional)<input id="novaDescricao" maxlength="200" placeholder="Como o movimento é feito"></label>
         </div>
-        <p class="mudo pequeno" id="descExercicio"></p>
-        <div class="dupla">
-          <label>Nº de séries<input name="series_alvo" type="number" min="1" max="10" required></label>
-          <label>Repetições por série<input name="reps_alvo" type="number" min="1" max="200" placeholder="livre"></label>
-        </div>
-        <label>Cada série começa pelo braço<select name="ordem">
-          <option value="saudavel">Saudável → depois o afetado</option><option value="afetado">Afetado → depois o saudável</option></select></label>
-        <div class="dupla">
-          <label>Cadência (rep/min)<input name="cadencia_alvo" type="number" min="4" max="30" required></label>
-          <label>Duração (min/série)<input name="duracao_min" type="number" min="1" max="30" required></label>
-        </div>
-        <div class="dupla">
-          <label>Posição baixa (°)<input name="amp_min" type="number" required></label>
-          <label>Posição alta (°)<input name="amp_max" type="number" required></label>
-        </div>
-        <button class="pri">Criar sessão e abrir o jogo</button>
-        <p class="mudo pequeno" id="resumoPlano"></p>
-      </form>
+        <div class="botoes"><button type="button" class="pri" id="btCriarCategoria">Criar categoria</button>
+          <button type="button" class="fantasma" id="btCancelarCategoria">Cancelar</button></div>
+      </div>
+      <div class="grade-form">
+        <label>Séries<input name="series_alvo" type="number" min="1" max="10" required></label>
+        <label>Reps por série<input name="reps_alvo" type="number" min="1" max="200" placeholder="livre"></label>
+        <label>Cadência (rep/min)<input name="cadencia_alvo" type="number" min="4" max="30" required></label>
+        <label>Duração (min)<input name="duracao_min" type="number" min="1" max="30" required></label>
+        <label>Posição baixa (°)<input name="amp_min" type="number" required></label>
+        <label>Posição alta (°)<input name="amp_max" type="number" required></label>
+      </div>
+      <p class="mudo pequeno" id="descExercicio" style="margin:0 0 6px"></p>
+      <div class="rodape-form">
+        <p class="mudo pequeno" id="resumoPlano" style="margin:0"></p>
+        <div class="botoes">${sessoes.length ? '<button type="button" class="fantasma" id="btCancelarSessao">Cancelar</button>' : ''}
+          <button class="pri">Criar sessão e abrir o jogo</button></div>
+      </div>
+    </form>
 
-      <section class="cartao">
-        <h2>Situação atual — <span class="foco"></span></h2>
-        ${comSessoes.length > 1 ? `<div class="filtros">Exercício
-          <select id="fExercicio">${comSessoes.map(e => `<option value="${e.id}" ${e.id === foco ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select>
-        </div>` : ''}
-        <div id="situacao"></div>
-      </section>
+    ${comSessoes.length ? `
+    <div class="barra">
+      <div class="abas"><button data-aba="situacao">Situação atual</button><button data-aba="evolucao">Evolução</button><button data-aba="historico">Histórico</button></div>
+      ${comSessoes.length > 1
+        ? `<select id="fExercicio" aria-label="Exercício">${comSessoes.map(e => `<option value="${e.id}" ${e.id === foco ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select>`
+        : `<span class="rotulo-ex">${esc(comSessoes[0].nome)}</span>`}
     </div>
 
-    <section class="cartao" id="secaoEvolucao">
-      <h2>Evolução do braço afetado — <span class="foco"></span></h2>
-      <div class="graficos">
+    <section data-painel="situacao"><div id="situacao"></div></section>
+
+    <section data-painel="evolucao" hidden>
+      <p class="mudo pequeno" id="semEvolucao"></p>
+      <div class="cartao"><div class="graficos">
         ${cartaoGrafico('gSim', 'O braço afetado está se aproximando do saudável?',
           'cada ponto é uma sessão. 100 % = o braço afetado alcança a mesma amplitude do saudável. A faixa verde é a região de simetria (90 % a 110 %).', { alto: true, melhor: 'maior' })}
         ${cartaoGrafico('gScore', 'Score geral de cada braço',
           'resume controle, simetria, estabilidade e fluidez (0 a 100). A distância entre as linhas mostra quanto o afetado ainda está atrás do saudável.', { alto: true, melhor: 'maior' })}
-      </div>
-      <div class="multiplos" style="margin-top:22px">
+      </div></div>
+      <div class="cartao"><div class="multiplos">
         ${cartaoGrafico('evAmp', 'Amplitude alcançada (°)', 'ângulo médio percorrido por repetição.', { melhor: 'maior' })}
         ${cartaoGrafico('evRitmo', 'Repetições no ritmo (%)', 'parte das repetições feitas no tempo pedido.', { melhor: 'maior' })}
         ${cartaoGrafico('evControle', 'Desvio do movimento ideal (°)', 'quanto a repetição média se afasta da trajetória ideal.', { melhor: 'menor' })}
         ${cartaoGrafico('evFluidez', 'Fluidez: afetado ÷ saudável', 'quantas vezes o movimento do afetado tem mais trancos. 1 = igual ao saudável.', { melhor: 'menor' })}
         ${cartaoGrafico('evTremor', 'Tremor: afetado ÷ saudável', 'quantas vezes o tremor do afetado é maior. 1 = igual ao saudável.', { melhor: 'menor' })}
         ${cartaoGrafico('evLateral', 'Desvio lateral (cm)', 'quanto o haltere vai para os lados; pode indicar compensação.', { melhor: 'menor' })}
-      </div>
-      <p class="mudo pequeno" id="semEvolucao"></p>
+      </div></div>
     </section>
 
-    <section class="cartao">
-      <h2>Histórico de sessões — <span class="foco"></span></h2>
-      <div id="tabelaSessoes"></div>
-    </section>
-    ${glossario()}`;
+    <section data-painel="historico" hidden><div class="cartao sem-pad tabela-rolavel" id="tabelaSessoes"></div></section>
+    ${glossario()}`
+    : sessoes.length ? '' : '<p class="vazio">Ainda não há sessões. Configure a primeira acima e abra o jogo.</p>'}`;
+
+  // ---- Exportar: baixa o .zip só se o servidor respondeu com ele; senão mostra o erro ----
+  $('#btExportar').onclick = async ev => {
+    ev.preventDefault();
+    const bt = $('#btExportar'), texto = bt.textContent;
+    bt.classList.add('ocupado'); bt.textContent = 'Gerando arquivo…';
+    try {
+      const r = await fetch(`/api/patients/${id}/export`);
+      if (r.status === 401) { location.hash = '#/login'; return; }
+      if (r.status === 404) throw new Error('o servidor não reconheceu a exportação. Reinicie o backend (python backend/app.py) e tente de novo.');
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erro || `erro ${r.status} no servidor`);
+      if (!(r.headers.get('Content-Type') || '').includes('zip')) throw new Error('o servidor não devolveu um arquivo .zip.');
+      const nome = /filename="?([^";]+)"?/.exec(r.headers.get('Content-Disposition') || '')?.[1] || `halter_paciente_${id}.zip`;
+      const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await r.blob()), download: nome });
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    } catch (erro) {
+      alert('Não foi possível exportar: ' + erro.message);
+    } finally {
+      bt.classList.remove('ocupado'); bt.textContent = texto;
+    }
+  };
 
   // ---- Editar e excluir paciente ----
-  $('#btEditar').onclick = () => { $('#fEditar').hidden = false; $('#fEditar [name=nome]').focus(); };
+  const fecharMenu = () => document.querySelectorAll('details.menu').forEach(m => { m.open = false; });
+  $('#btEditar').onclick = () => { fecharMenu(); $('#fSessao').hidden = true; $('#fEditar').hidden = false; $('#fEditar [name=nome]').focus(); };
   $('#btCancelarEdicao').onclick = () => { $('#fEditar').hidden = true; };
   aoEnviar($('#fEditar'), async dados => { await api(`/api/patients/${id}`, { method: 'PUT', body: dados }); rota(); });
   $('#btExcluir').onclick = async () => {
+    fecharMenu();
     const aviso = `Excluir ${p.nome}${sessoes.length ? ` e as ${sessoes.length} sessões registradas (com todas as leituras do haltere)` : ''}?\n\nEsta ação não pode ser desfeita.`;
     if (!confirm(aviso)) return;
     try { await api(`/api/patients/${id}`, { method: 'DELETE' }); location.hash = '#/'; } catch (e) { alert(e.message); }
@@ -503,6 +649,8 @@ async function telaPaciente(id) {
 
   // ---- Formulário de nova sessão: categoria e valores da última sessão desse exercício ----
   const form = $('#fSessao'), sel = $('#selExercicio');
+  $('#btNovaSessao').onclick = () => { $('#fEditar').hidden = true; form.hidden = false; form.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); sel.focus(); };
+  if ($('#btCancelarSessao')) $('#btCancelarSessao').onclick = () => { form.hidden = true; };
   const resumirPlano = () => {
     const n = +form.series_alvo.value || 0, r = +form.reps_alvo.value;
     const [a, b] = form.ordem.value === 'afetado' ? ['afetado', 'saudável'] : ['saudável', 'afetado'];
@@ -554,7 +702,6 @@ async function telaPaciente(id) {
     const eid = $('#fExercicio') ? +$('#fExercicio').value : comSessoes[0]?.id ?? null;
     const doExercicio = sessoes.filter(s => s.exercicio_id === eid);
     const feitas = doExercicio.filter(s => s.fim && s.analise?.bracos?.afetado);
-    document.querySelectorAll('.foco').forEach(el => el.textContent = exercicio(eid)?.nome || 'sem sessões');
 
     // Situação atual: indicadores da última sessão, comparados com a primeira
     const ultima = feitas.at(-1), primeira = feitas.length > 1 ? feitas[0] : null;
@@ -562,17 +709,18 @@ async function telaPaciente(id) {
       const antes = primeira ? Object.fromEntries(indicadores(primeira.analise).map(i => [i.id, i])) : {};
       const nScore = nivel(ultima.score_geral, FAIXAS.score);
       $('#situacao').innerHTML = `
-        <p class="pequeno mudo">Última sessão: ${dataHora(ultima.inicio)} · <a href="#/sessao/${ultima.id}">ver análise completa</a>
-          ${primeira ? ` · setas comparam com a 1ª sessão (${dataCurta(primeira.inicio)})` : ''}</p>
-        <div class="indicadores">
-          <div class="ind largo"><div><div class="nome">Score geral do braço afetado</div><div class="pergunta">Resumo da qualidade do movimento</div></div>
-            <div class="valor">${num(ultima.score_geral, 0)} de 100</div><div>${chip(nScore)}</div>
-            <div class="detalhe">braço saudável: ${num(doBraco(ultima, 'saudavel')?.score_geral, 0)}</div>
-            ${primeira ? `<div class="tendencia">${tendencia(ultima.score_geral, primeira.score_geral, FAIXAS.score, 'desde a 1ª sessão')}</div>` : ''}</div>
-          ${indicadores(ultima.analise).map(i => cartaoIndicador(i, antes[i.id], 'desde a 1ª sessão')).join('')}
-        </div>`;
+        <div class="cartao destaque">
+          <div><div class="mudo pequeno">Score do braço afetado</div>
+            <div class="numero">${num(ultima.score_geral, 0)}<small> / 100</small></div></div>
+          <div class="extra">${chip(nScore)}
+            <span>Braço saudável: <b>${num(doBraco(ultima, 'saudavel')?.score_geral, 0)}</b></span>
+            ${primeira ? `<span>${tendencia(ultima.score_geral, primeira.score_geral, FAIXAS.score, 'desde a 1ª sessão')}</span>` : ''}</div>
+          <a class="link" href="#/sessao/${ultima.id}">Ver sessão de ${dataCurta(ultima.inicio)} →</a>
+        </div>
+        <div class="indicadores">${indicadores(ultima.analise).map(i => cartaoIndicador(i, antes[i.id], 'desde a 1ª sessão')).join('')}</div>
+        ${primeira ? `<p class="mudo pequeno">As setas comparam a última sessão com a 1ª (${dataCurta(primeira.inicio)}).</p>` : ''}`;
     } else {
-      $('#situacao').innerHTML = '<p class="mudo">Ainda não há sessões concluídas deste exercício. Crie uma sessão ao lado para começar.</p>';
+      $('#situacao').innerHTML = '<p class="vazio">Ainda não há sessões concluídas deste exercício.</p>';
     }
 
     // Evolução
@@ -600,27 +748,31 @@ async function telaPaciente(id) {
 
     // Histórico
     $('#tabelaSessoes').innerHTML = doExercicio.length ? `<table>
-      <tr><th>Data</th><th class="num">Séries</th><th>Score do afetado</th><th class="num">Amplitude<br><span class="mudo">% do saudável</span></th>
-          <th class="num">Ritmo do afetado</th><th>Pontos de atenção</th><th></th></tr>
+      <tr><th>Data</th><th>Score do afetado</th><th class="num">Amplitude</th><th class="num">No ritmo</th><th>Atenção</th><th></th></tr>
       ${doExercicio.slice().reverse().map(s => {
         const n = s.analise ? interpretar(s.analise, [], null).atencao.length : null;
-        return `<tr><td>${dataHora(s.inicio)}</td><td class="num">${s.series_alvo ?? '—'}</td>
-          <td>${s.fim ? `${chip(nivel(s.score_geral, FAIXAS.score))} <b>${num(s.score_geral, 0)}</b>` : '<span class="mudo">em andamento</span>'}</td>
+        return `<tr ${s.fim ? `class="clicavel" data-href="#/sessao/${s.id}"` : ''}><td>${dataHora(s.inicio)}</td>
+          <td>${s.fim ? `<b>${num(s.score_geral, 0)}</b> ${chip(nivel(s.score_geral, FAIXAS.score))}` : '<span class="mudo">em andamento</span>'}</td>
           <td class="num">${num(s.analise?.simetria?.excursao_pct, 0, ' %')}</td>
           <td class="num">${num(pct(doBraco(s, 'afetado')?.jogo?.aderencia_cadencia), 0, ' %')}</td>
-          <td>${n == null ? '—' : n === 0 ? 'nenhum' : `${n} ${n === 1 ? 'ponto' : 'pontos'}`}</td>
-          <td class="num">${s.fim ? `<a href="#/sessao/${s.id}">Ver análise</a>` : ''}</td></tr>`;
+          <td>${n == null ? '—' : n === 0 ? 'nenhum ponto' : `${n} ${n === 1 ? 'ponto' : 'pontos'}`}</td>
+          <td class="num mudo">${s.fim ? '›' : ''}</td></tr>`;
       }).join('')}
-    </table>` : '<p class="mudo">Nenhuma sessão ainda.</p>';
+    </table>
+    <p class="mudo pequeno" style="margin:8px">Amplitude = braço afetado em % do saudável. Clique numa sessão para ver a análise.</p>` : '<p class="vazio">Nenhuma sessão ainda.</p>';
+    document.querySelectorAll('tr[data-href]').forEach(tr => tr.onclick = () => { location.hash = tr.dataset.href; });
   }
+  if (!comSessoes.length) return;
   if ($('#fExercicio')) $('#fExercicio').onchange = atualizar;
   atualizar();
+  abas('paciente');
 }
 
 // ===================== TELA DA SESSÃO =====================
 async function telaSessao(id) {
   const s = await api(`/api/sessions/${id}`);
-  const historicoEx = await api(`/api/patients/${s.patient_id}/sessions?exercicio_id=${s.exercicio_id}`);
+  const [historicoEx, paciente] = await Promise.all([
+    api(`/api/patients/${s.patient_id}/sessions?exercicio_id=${s.exercicio_id}`), api(`/api/patients/${s.patient_id}`)]);
   const anterior = historicoEx.filter(x => x.fim && x.analise?.bracos?.afetado && x.inicio < s.inicio).at(-1) || null;
   const a = s.analise, af = a?.bracos?.afetado || {}, sa = a?.bracos?.saudavel || {};
   const temAnalise = !!af.metricas;
@@ -629,25 +781,29 @@ async function telaSessao(id) {
   const nScore = nivel(af.score_geral, FAIXAS.score);
   const corNivel = { bom: '--bom', atencao: '--atencao', alerta: '--alerta' };
 
+  const ABAS = [temAnalise && ['indicadores', 'Indicadores'], temAnalise && ['comparacao', 'Comparação entre braços'],
+                s.reps.length && ['repeticoes', 'Repetições'], ['series', 'Séries'], s.series.length && ['tecnico', 'Dados técnicos']].filter(Boolean);
+  trilha([['Pacientes', '#/'], [paciente.nome, `#/paciente/${s.patient_id}`], [`Sessão de ${dataCurta(s.inicio)}`]]);
+
   app.innerHTML = `
-    <a class="voltar" href="#/paciente/${s.patient_id}">← Paciente</a>
-    <h1>${esc(s.exercicio_nome || s.exercicio)} · ${dataHora(s.inicio)}</h1>
-    <p class="mudo">${s.series_alvo} ${s.series_alvo === 1 ? 'série' : 'séries'} com cada braço${s.reps_alvo ? ` × ${s.reps_alvo} repetições` : ''}
-      · cadência pedida ${num(s.cadencia_alvo, 0)} rep/min (1 repetição a cada ${num(60 / s.cadencia_alvo, 1)} s)
-      ${anterior ? ` · comparada com a sessão de ${dataCurta(anterior.inicio)}` : ' · primeira sessão deste exercício'}</p>
+    <div class="topo-pagina"><div>
+      <h1>${esc(s.exercicio_nome || s.exercicio)}</h1>
+      <p class="mudo pequeno">${dataHora(s.inicio)} · ${s.series_alvo} ${s.series_alvo === 1 ? 'série' : 'séries'} com cada braço${s.reps_alvo ? ` × ${s.reps_alvo} repetições` : ''}
+        · ${num(s.cadencia_alvo, 0)} rep/min${anterior ? ` · comparada com ${dataCurta(anterior.inicio)}` : ' · 1ª sessão deste exercício'}</p>
+    </div></div>
 
     ${!s.fim ? '<p class="cartao">Sessão em andamento. A análise aparece quando o jogo for encerrado.</p>' : `
     <section class="cartao resumo">
       <div class="score">
-        <h2>Score geral · braço afetado</h2>
-        <div>${chip(nScore)}</div>
+        <div class="mudo pequeno">Score do braço afetado</div>
         <div class="valor">${num(af.score_geral, 0)}<small> / 100</small></div>
+        <div>${chip(nScore)}</div>
         <div class="medidor"><i style="width:${af.score_geral ?? 0}%;background:var(${corNivel[nScore] || '--neutro'})"></i></div>
         <p class="pequeno">Braço saudável: <b>${num(sa.score_geral, 0)}</b> / 100</p>
-        ${anterior ? `<p class="pequeno">${tendencia(af.score_geral, anterior.analise.score_geral, FAIXAS.score, 'em relação à sessão anterior')}</p>` : ''}
+        ${anterior ? `<p class="pequeno">${tendencia(af.score_geral, anterior.analise.score_geral, FAIXAS.score, 'vs. sessão anterior')}</p>` : ''}
       </div>
       <div>
-        <h2>O que observar nesta sessão</h2>
+        <h2>O que observar</h2>
         ${!temAnalise ? '<p class="mudo">Não há leituras do haltere suficientes nesta sessão para a análise do movimento.</p>' : `
         <ul class="notas-texto">
           ${atencao.map(([n, t]) => `<li><span class="icone ${n}">${STATUS[n][0]}</span><span>${t}</span></li>`).join('')
@@ -655,50 +811,43 @@ async function telaSessao(id) {
           ${destaques.map(t => `<li><span class="icone bom">✓</span><span>${t}</span></li>`).join('')}
         </ul>`}
       </div>
-    </section>
+    </section>`}
 
-    ${temAnalise ? `<section class="cartao">
-      <h2>Indicadores do braço afetado</h2>
+    <div class="barra"><div class="abas">${ABAS.map(([k, t]) => `<button data-aba="${k}">${t}</button>`).join('')}</div></div>
+
+    ${temAnalise ? `<section data-painel="indicadores">
       <div class="indicadores">${ind.map(i => cartaoIndicador(i, antes[i.id], 'vs. sessão anterior')).join('')}</div>
     </section>
 
-    <section class="cartao">
-      <h2>Comparação entre os braços</h2>
-      <div class="graficos">
-        ${cartaoGrafico('gComparacao', 'Afetado × saudável em cada aspecto',
-          'tudo em escala de 0 a 100, em que quanto maior a barra, melhor. A diferença entre a barra azul (saudável) e a laranja (afetado) mostra onde o braço afetado está mais atrás.', { alto: true })}
-        ${cartaoGrafico('gRepeticao', 'Como é uma repetição média?',
-          'cada linha é a média das repetições, do início (esquerda) ao fim (direita). Linha laranja mais baixa = o afetado não sobe tanto; pico deslocado para a direita = subida mais lenta. A linha tracejada é o movimento ideal.', { alto: true })}
-      </div>
-    </section>` : ''}`}
+    <section data-painel="comparacao" hidden><div class="cartao"><div class="graficos">
+      ${cartaoGrafico('gComparacao', 'Afetado × saudável em cada aspecto',
+        'tudo em escala de 0 a 100, em que quanto maior a barra, melhor. A diferença entre a barra azul (saudável) e a laranja (afetado) mostra onde o braço afetado está mais atrás.', { alto: true })}
+      ${cartaoGrafico('gRepeticao', 'Como é uma repetição média?',
+        'cada linha é a média das repetições, do início (esquerda) ao fim (direita). Linha laranja mais baixa = o afetado não sobe tanto; pico deslocado para a direita = subida mais lenta. A linha tracejada é o movimento ideal.', { alto: true })}
+    </div></div></section>` : ''}
 
-    ${s.reps.length ? `<section class="cartao">
-      <h2>Repetição por repetição</h2>
-      <div class="graficos">
-        ${cartaoGrafico('gAmpReps', 'Cada repetição alcançou a amplitude pedida?',
-          '100 % = chegou à posição alta configurada para aquele braço. Barras bem abaixo da linha indicam repetições incompletas. S1·3 = série 1, 3ª repetição (passe o mouse para ver o braço). A 1ª repetição de cada série costuma ser menor porque parte do repouso.')}
-        ${cartaoGrafico('gTempoReps', 'O ritmo foi mantido?',
-          '100 % = repetição exatamente no tempo pedido. Pontos dentro da faixa verde estão no ritmo; acima = lento, abaixo = rápido. A 1ª repetição de cada série não tem tempo medido.')}
-      </div>
-    </section>` : ''}
+    ${s.reps.length ? `<section data-painel="repeticoes" hidden><div class="cartao"><div class="graficos">
+      ${cartaoGrafico('gAmpReps', 'Cada repetição alcançou a amplitude pedida?',
+        '100 % = chegou à posição alta configurada para aquele braço. Barras bem abaixo da linha indicam repetições incompletas. S1·3 = série 1, 3ª repetição (passe o mouse para ver o braço). A 1ª repetição de cada série costuma ser menor porque parte do repouso.')}
+      ${cartaoGrafico('gTempoReps', 'O ritmo foi mantido?',
+        '100 % = repetição exatamente no tempo pedido. Pontos dentro da faixa verde estão no ritmo; acima = lento, abaixo = rápido. A 1ª repetição de cada série não tem tempo medido.')}
+    </div></div></section>` : ''}
 
-    <section class="cartao">
-      <h2>Séries</h2>
-      <div class="serie-fadiga"><div>
+    <section data-painel="series" hidden><div class="cartao">
+      <div class="serie-fadiga"><div class="tabela-rolavel">
       ${s.series.length ? `<table>
         <tr><th>Série</th><th>Braço</th><th class="num">Reps</th><th class="num">No ritmo</th><th class="num">Amplitude</th>
             <th class="num">Pontos</th><th>Score</th></tr>
         ${s.series.map(x => `<tr><td>${x.n}</td><td><span class="bolinha" style="background:var(${x.braco === 'afetado' ? '--s2' : '--s1'})"></span>${nomeBraco(x.braco)}</td>
           <td class="num">${x.total_reps ?? '—'}</td><td class="num">${num(pct(x.aderencia_cadencia), 0, ' %')}</td>
           <td class="num">${num(x.amp_media, 0, '°')}</td><td class="num">${x.pontuacao ?? '—'}</td>
-          <td>${x.score_geral == null ? '—' : `${chip(nivel(x.score_geral, FAIXAS.score))} ${num(x.score_geral, 0)}`}</td></tr>`).join('')}
-      </table>` : '<p class="mudo">Nenhuma série registrada.</p>'}
+          <td>${x.score_geral == null ? '—' : `${num(x.score_geral, 0)} ${chip(nivel(x.score_geral, FAIXAS.score))}`}</td></tr>`).join('')}
+      </table>` : '<p class="vazio">Nenhuma série registrada.</p>'}
       </div>${s.series.length > 2 ? cartaoGrafico('gFadiga', 'Houve fadiga ao longo das séries?',
           'amplitude média de cada série. Uma linha que cai de uma série para a outra sugere cansaço.', { melhor: 'maior' }) : ''}</div>
-    </section>
+    </div></section>
 
-    ${s.series.length ? `<details class="cartao" id="tecnico"><summary>Detalhes técnicos (métricas do memorial de cálculo e sinais do sensor)</summary>
-      <div id="conteudoTecnico"></div></details>` : ''}
+    ${s.series.length ? '<section data-painel="tecnico" hidden><div class="cartao" id="conteudoTecnico"></div></section>' : ''}
     ${glossario()}`;
 
   // ---- Gráficos de comparação ----
@@ -742,9 +891,8 @@ async function telaSessao(id) {
       options: opcoes({ xTipo: 'category', yMin: 0, un: '°' }) });
   }
 
-  // ---- Detalhes técnicos: desenhados só quando abertos ----
-  const tecnico = $('#tecnico');
-  if (tecnico) tecnico.ontoggle = () => { if (tecnico.open && !$('#conteudoTecnico').innerHTML) detalhesTecnicos(s); };
+  // ---- Abas; os dados técnicos só são desenhados quando a aba é aberta ----
+  abas('sessao', { tecnico: () => { if (!$('#conteudoTecnico').innerHTML) detalhesTecnicos(s); } });
 }
 
 function detalhesTecnicos(s) {
@@ -766,13 +914,13 @@ function detalhesTecnicos(s) {
     ['Nota de suavidade (5.10)', b => b.notas?.suavidade, 0, ''],
   ];
   $('#conteudoTecnico').innerHTML = `
-    <h3>Métricas por braço</h3>
-    <table><tr><th>Métrica (seção do memorial)</th><th class="num">Saudável</th><th class="num">Afetado</th></tr>
+    <h2>Métricas por braço (memorial de cálculo)</h2>
+    <div class="tabela-rolavel"><table><tr><th>Métrica (seção do memorial)</th><th class="num">Saudável</th><th class="num">Afetado</th></tr>
       ${LINHAS.map(([rot, f, casas, un]) => `<tr><td>${rot}</td><td class="num">${num(f(sa), casas, un)}</td><td class="num">${num(f(af), casas, un)}</td></tr>`).join('')}
       <tr><td>RMSE entre os braços (5.9)</td><td class="num" colspan="2">${num(a?.simetria?.rmse, 1, '°')}</td></tr>
       <tr><td>Atraso do ápice do afetado (5.9)</td><td class="num" colspan="2">${num(a?.simetria?.atraso_apice_pct, 0, ' % do ciclo')}</td></tr>
-    </table>
-    <h3 style="margin-top:20px">Sinais de uma série</h3>
+    </table></div>
+    <h3 class="titulo-secao">Sinais de uma série</h3>
     <div class="filtros">Série <select id="selSerie">${s.series.map(x => `<option value="${x.id}">Série ${x.n} · ${nomeBraco(x.braco)}</option>`).join('')}</select></div>
     <div id="sinais"></div>`;
   const sel = $('#selSerie');

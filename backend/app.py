@@ -4,25 +4,32 @@ Backend do Halter Inteligente
 1. Conecta ao haltere por Bluetooth (BLE) e repassa cada leitura ao jogo em tempo real (Server-Sent Events)
 2. Guarda pacientes, sessões (com séries dos dois braços) e repetições em SQLite
 3. Módulo de análise: aplica os métodos numéricos do memorial de cálculo às leituras de cada sessão
-4. Serve a plataforma do profissional (/) e o jogo (/game/)
+4. Exporta os dados de cada paciente (CSV + gráficos) em um .zip
+5. Serve a plataforma do profissional (/) e o jogo (/game/)
 
 Rodar:  python backend/app.py   →  http://localhost:5000
 Login padrão: fisio / halter123 (troque com as variáveis HALTER_USUARIO e HALTER_SENHA)
 """
 import asyncio
+import csv
+import io
 import json
 import os
 import queue
+import re
 import sqlite3
 import threading
+import unicodedata
 import warnings
+import zipfile
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
 import numpy as np
 from bleak import BleakClient, BleakScanner
-from flask import Flask, Response, abort, g, jsonify, make_response, request, send_from_directory, session
+from flask import Flask, Response, abort, g, jsonify, make_response, request, send_file, send_from_directory, session
+from matplotlib.patches import Patch
 
 RAIZ = Path(__file__).resolve().parent.parent
 FRONT = RAIZ / 'frontend'
@@ -135,6 +142,8 @@ CREATE TABLE IF NOT EXISTS series (
   inicio TEXT, fim TEXT, cadencia REAL, amp_min REAL, amp_max REAL,                         -- valores usados na série
   duracao_s REAL, total_reps INTEGER, amp_media REAL, vel_media REAL, aderencia_cadencia REAL,
   obstaculos TEXT, pontuacao INTEGER, score_geral REAL, analise TEXT);
+CREATE TABLE IF NOT EXISTS jogadores (                                                     -- progresso no jogo
+  patient_id INTEGER PRIMARY KEY REFERENCES patients(id), xp INTEGER DEFAULT 0, conquistas TEXT, visual TEXT, atualizado TEXT);
 CREATE TABLE IF NOT EXISTS reps (
   id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL REFERENCES sessions(id), serie_id INTEGER REFERENCES series(id),
   n INTEGER, t_ms INTEGER, amplitude REAL, vel_pico REAL, duracao_s REAL, no_ritmo INTEGER, cadencia REAL);
@@ -478,6 +487,257 @@ def salvar_analise_sessao(sid):
 
 
 # =====================================================================
+# 3b. EXPORTAÇÃO — tudo o que foi coletado de um paciente em um .zip (CSV + gráficos PNG)
+#     CSV no padrão do Excel em português: separador ";" e vírgula decimal, UTF-8 com BOM
+# =====================================================================
+CORES = {'saudavel': '#2a78d6', 'afetado': '#eb6834', 'neutro': '#9a9993', 'faixa': '#0ca30c22'}
+NOME_BRACO = {'saudavel': 'Saudável', 'afetado': 'Afetado'}
+
+
+def slug(texto):
+    """Nome seguro para arquivo: sem acentos, minúsculo, com _ no lugar de espaços."""
+    texto = unicodedata.normalize('NFKD', str(texto)).encode('ascii', 'ignore').decode()
+    return re.sub(r'[^a-z0-9]+', '_', texto.lower()).strip('_') or 'sem_nome'
+
+
+def celula(v):
+    if v is None:
+        return ''
+    if isinstance(v, bool):
+        return 'sim' if v else 'não'
+    if isinstance(v, float):
+        return '' if not np.isfinite(v) else f'{v:.6g}'.replace('.', ',')
+    return str(v)
+
+
+def csv_bytes(cabecalho, linhas):
+    saida = io.StringIO()
+    escritor = csv.writer(saida, delimiter=';', lineterminator='\r\n')
+    escritor.writerow(cabecalho)
+    escritor.writerows([celula(v) for v in linha] for linha in linhas)
+    return saida.getvalue().encode('utf-8-sig')
+
+
+def png(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=130, bbox_inches='tight')
+    return buf.getvalue()
+
+
+def figura(titulo, linhas=2, colunas=2):
+    from matplotlib.figure import Figure        # API orientada a objetos: segura com o servidor em várias threads
+    fig = Figure(figsize=(6.2 * colunas, 3.9 * linhas), layout='constrained')
+    eixos = fig.subplots(linhas, colunas, squeeze=False).ravel()
+    fig.suptitle(titulo, fontsize=14, fontweight='bold')
+    for ax in eixos:
+        ax.grid(axis='y', color='#e4e3df'); ax.spines[['top', 'right']].set_visible(False)
+    return fig, eixos
+
+
+def sem_dados(ax, titulo):
+    ax.set_title(titulo, loc='left', fontsize=11)
+    ax.text(0.5, 0.5, 'sem dados suficientes', ha='center', va='center', color=CORES['neutro'], transform=ax.transAxes)
+    ax.set_xticks([]); ax.set_yticks([])
+
+
+def nan(v):
+    return np.nan if v is None else float(v)
+
+
+def grafico_evolucao(exercicio, sessoes):
+    """Evolução de um exercício ao longo das sessões concluídas."""
+    rotulos = [f"{i + 1}ª\n{datetime.fromisoformat(s['inicio']):%d/%m}" for i, s in enumerate(sessoes)]
+    x = np.arange(len(sessoes))
+    b = lambda s, braco: s['analise']['bracos'].get(braco) or {}
+    fig, eixos = figura(f'Evolução — {exercicio}')
+    paineis = [
+        ('Score geral (0 a 100)', lambda s, k: b(s, k).get('score_geral'), (0, 100)),
+        ('Repetições no ritmo (%)', lambda s, k: None if b(s, k).get('jogo', {}).get('aderencia_cadencia') is None
+         else 100 * b(s, k)['jogo']['aderencia_cadencia'], (0, 100)),
+        ('Desvio do movimento ideal (°)', lambda s, k: b(s, k).get('metricas', {}).get('rmse_trajetoria'), (0, None)),
+    ]
+    for ax, (titulo, f, lim) in zip(eixos, paineis):
+        ax.set_title(titulo, loc='left', fontsize=11)
+        for braco in BRACOS:
+            ax.plot(x, [nan(f(s, braco)) for s in sessoes], 'o-', color=CORES[braco], label=NOME_BRACO[braco], lw=2)
+        if lim:
+            ax.set_ylim(*lim)
+        ax.set_xticks(x, rotulos, fontsize=8); ax.legend(fontsize=8, frameon=False)
+    ax = eixos[3]
+    amp = [nan((s['analise'].get('simetria') or {}).get('excursao_pct')) for s in sessoes]
+    ax.set_title('Amplitude do afetado (% do saudável)', loc='left', fontsize=11)
+    ax.axhspan(90, 110, color=CORES['faixa'], label='faixa de simetria')
+    ax.axhline(100, color=CORES['neutro'], ls='--', lw=1)
+    ax.plot(x, amp, 'o-', color=CORES['afetado'], lw=2.5)
+    ax.set_ylim(0, max([110] + [v for v in amp if np.isfinite(v)]) * 1.05)
+    ax.set_xticks(x, rotulos, fontsize=8); ax.legend(fontsize=8, frameon=False)
+    return png(fig)
+
+
+def grafico_sessao(sessao, series, reps):
+    """Resumo visual de uma sessão: repetição média, comparação entre braços e cada repetição."""
+    an = sessao['analise'] or {}
+    bracos = an.get('bracos', {})
+    fig, eixos = figura(f"{sessao['exercicio']} — {datetime.fromisoformat(sessao['inicio']):%d/%m/%Y %H:%M}"
+                        + (f" · score do afetado {sessao['score_geral']:.0f}" if sessao['score_geral'] is not None else ''))
+
+    ax = eixos[0]
+    if any('curva_media' in bracos.get(k, {}) for k in BRACOS):
+        ax.set_title('Repetição média (ângulo a partir da posição baixa)', loc='left', fontsize=11)
+        for k in BRACOS:
+            if 'curva_media' in bracos.get(k, {}):
+                c = np.array(bracos[k]['curva_media'], float)
+                ax.plot(np.linspace(0, 100, len(c)), c, color=CORES[k], lw=2.5, label=NOME_BRACO[k])
+        ideal = (bracos.get('afetado') or {}).get('curva_ideal')
+        if ideal:
+            ax.plot(np.linspace(0, 100, len(ideal)), ideal, '--', color=CORES['neutro'], label='Ideal (afetado)')
+        ax.set_xlabel('início → fim da repetição (%)'); ax.set_ylabel('°'); ax.legend(fontsize=8, frameon=False)
+    else:
+        sem_dados(eixos[0], 'Repetição média')
+
+    ax = eixos[1]
+    aspectos = [('Amplitude\n(% da meta)', lambda r: min(100, r['metricas']['amplitude_pct']) if r.get('metricas', {}).get('amplitude_pct') is not None else None),
+                ('Ritmo\n(% no tempo)', lambda r: None if (r.get('jogo') or {}).get('aderencia_cadencia') is None else 100 * r['jogo']['aderencia_cadencia']),
+                ('Controle', lambda r: (r.get('notas') or {}).get('trajetoria')),
+                ('Fluidez', lambda r: (r.get('notas') or {}).get('suavidade')),
+                ('Estabilidade\nlateral', lambda r: (r.get('notas') or {}).get('estabilidade'))]
+    if any(bracos.get(k, {}).get('metricas') for k in BRACOS):
+        ax.set_title('Afetado × saudável (0 a 100, maior é melhor)', loc='left', fontsize=11)
+        y = np.arange(len(aspectos))
+        for i, k in enumerate(BRACOS):
+            vals = [nan(f(bracos.get(k) or {})) for _, f in aspectos]
+            ax.barh(y + (i - 0.5) * 0.38, vals, height=0.36, color=CORES[k], label=NOME_BRACO[k])
+        ax.set_yticks(y, [a for a, _ in aspectos], fontsize=8); ax.invert_yaxis(); ax.set_xlim(0, 100)
+        ax.grid(axis='x', color='#e4e3df'); ax.grid(axis='y', visible=False); ax.legend(fontsize=8, frameon=False)
+    else:
+        sem_dados(ax, 'Afetado × saudável')
+
+    serie_de = {s['id']: s for s in series}
+    reps = [r for r in reps if r['serie_id'] in serie_de]
+    if reps:
+        x = np.arange(len(reps))
+        rot = [f"S{serie_de[r['serie_id']]['n']}·{r['n']}" for r in reps]
+        cores = [CORES[serie_de[r['serie_id']]['braco']] for r in reps]
+        meta = lambda r: abs(serie_de[r['serie_id']]['amp_max'] - serie_de[r['serie_id']]['amp_min'])
+        ax = eixos[2]
+        ax.set_title('Amplitude de cada repetição (% da meta)', loc='left', fontsize=11)
+        ax.bar(x, [100 * r['amplitude'] / meta(r) if meta(r) else np.nan for r in reps], color=cores)
+        ax.axhline(100, color=CORES['neutro'], ls='--', lw=1)
+        ax = eixos[3]
+        ax.set_title('Tempo de cada repetição (% do tempo pedido)', loc='left', fontsize=11)
+        ax.axhspan(80, 120, color=CORES['faixa'])
+        ax.scatter(x, [np.nan if r['duracao_s'] is None else 100 * r['duracao_s'] * r['cadencia'] / 60 for r in reps], c=cores, s=22)
+        passo = max(1, len(reps) // 20)
+        for ax in eixos[2:]:
+            ax.set_xticks(x[::passo], rot[::passo], fontsize=7, rotation=45)
+            ax.legend(handles=[Patch(color=CORES[k], label=NOME_BRACO[k]) for k in BRACOS], fontsize=8, frameon=False)
+    else:
+        sem_dados(eixos[2], 'Amplitude de cada repetição'); sem_dados(eixos[3], 'Tempo de cada repetição')
+    return png(fig)
+
+
+def exportar_paciente(pid):
+    """Monta o .zip com CSVs (paciente, sessões, séries, repetições, leituras do sensor) e gráficos PNG."""
+    p = consulta('SELECT * FROM patients WHERE id = ?', pid)[0]
+    sessoes = consulta(SQL_SESSAO + 'WHERE s.patient_id = ? ORDER BY s.inicio', pid)
+    for s in sessoes:
+        s['exercicio'] = s['exercicio_nome'] or s['exercicio']
+        s['analise'] = json.loads(s['analise']) if s['analise'] else None
+    series = consulta('SELECT se.* FROM series se JOIN sessions s ON s.id = se.session_id WHERE s.patient_id = ? '
+                      'ORDER BY se.session_id, se.n, se.inicio', pid)
+    reps = consulta('SELECT r.* FROM reps r JOIN sessions s ON s.id = r.session_id WHERE s.patient_id = ? '
+                    'ORDER BY r.session_id, r.serie_id, r.n', pid)
+    serie_de = {s['id']: s for s in series}
+    sessao_de = {s['id']: s for s in sessoes}
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('LEIA-ME.txt', LEIA_ME.format(nome=p['nome'], data=datetime.now().strftime('%d/%m/%Y %H:%M')).encode('utf-8-sig'))
+        j = (consulta('SELECT xp, conquistas FROM jogadores WHERE patient_id = ?', pid) or [{'xp': 0, 'conquistas': None}])[0]
+        z.writestr('paciente.csv', csv_bytes(['id', 'nome', 'nascimento', 'observacoes', 'total_sessoes', 'xp_jogo', 'conquistas_jogo'],
+                                             [[p['id'], p['nome'], p['nascimento'], p['observacoes'], len(sessoes), j['xp'] or 0,
+                                               ', '.join(json.loads(j['conquistas'] or '{}'))]]))
+
+        # Sessões: configuração + resumo de cada braço + comparação entre braços
+        por_braco = [('total_reps', 'jogo'), ('aderencia_cadencia', 'jogo'), ('tempo_relativo', 'jogo'), ('amp_media', 'jogo'),
+                     ('amplitude_alvo', 'jogo'), ('pontuacao', 'jogo'), ('score_geral', None), ('excursao', 'metricas'),
+                     ('amplitude_pct', 'metricas'), ('rmse_trajetoria', 'metricas'), ('jerk_medio', 'metricas'),
+                     ('i_suavidade', 'metricas'), ('rms_tremor', 'metricas'), ('mu_x', 'metricas'), ('s_x', 'metricas'),
+                     ('vel_linear_pico', 'metricas'), ('trajetoria', 'notas'), ('simetria', 'notas'),
+                     ('estabilidade', 'notas'), ('suavidade', 'notas')]
+        cab = ['sessao_id', 'inicio', 'fim', 'exercicio', 'series_alvo', 'reps_alvo', 'ordem', 'cadencia_alvo', 'amp_min',
+               'amp_max', 'duracao_min', 'score_geral_afetado', 'simetria_rmse', 'simetria_excursao_pct', 'simetria_atraso_apice_pct']
+        cab += [braco + '_' + ('nota_' if grupo == 'notas' else '') + campo for braco in BRACOS for campo, grupo in por_braco]
+        linhas = []
+        for s in sessoes:
+            an = s['analise'] or {}
+            sim = an.get('simetria') or {}
+            linha = [s['id'], s['inicio'], s['fim'], s['exercicio'], s['series_alvo'], s['reps_alvo'], s['ordem'],
+                     s['cadencia_alvo'], s['amp_min'], s['amp_max'], s['duracao_min'], s['score_geral'],
+                     sim.get('rmse'), sim.get('excursao_pct'), sim.get('atraso_apice_pct')]
+            for braco in BRACOS:
+                r = (an.get('bracos') or {}).get(braco) or {}
+                linha += [r.get(campo) if grupo is None else (r.get(grupo) or {}).get(campo) for campo, grupo in por_braco]
+            linhas.append(linha)
+        z.writestr('sessoes.csv', csv_bytes(cab, linhas))
+
+        cab = ['serie_id', 'sessao_id', 'exercicio', 'n', 'braco', 'inicio', 'fim', 'cadencia', 'amp_min', 'amp_max', 'duracao_s',
+               'total_reps', 'amp_media', 'vel_media', 'aderencia_cadencia', 'obstaculos', 'pontuacao', 'score_geral']
+        z.writestr('series.csv', csv_bytes(cab, [[s['id'], s['session_id'], sessao_de[s['session_id']]['exercicio']]
+                                                 + [s[c] for c in cab[3:]] for s in series]))
+
+        cab = ['sessao_id', 'serie_id', 'serie_n', 'braco', 'rep_n', 't_ms', 'amplitude', 'vel_pico', 'duracao_s', 'no_ritmo', 'cadencia']
+        z.writestr('repeticoes.csv', csv_bytes(cab, [
+            [r['session_id'], r['serie_id'], (serie_de.get(r['serie_id']) or {}).get('n'), (serie_de.get(r['serie_id']) or {}).get('braco'),
+             r['n'], r['t_ms'], r['amplitude'], r['vel_pico'], r['duracao_s'], None if r['no_ritmo'] is None else bool(r['no_ritmo']),
+             r['cadencia']] for r in reps]))
+
+        # Leituras do sensor de cada sessão (pacote do ESP32 a 50 Hz)
+        for s in sessoes:
+            d = ler_brutos(s['id'])
+            if d is not None:
+                z.writestr(f"leituras_sensor/sessao_{s['id']}_{s['inicio'][:10]}.csv",
+                           csv_bytes(['t_ms', 'theta_graus', 'ax_m_s2', 'ay_lin_m_s2', 'az_lin_m_s2'],
+                                     [[int(l[0])] + [float(v) for v in l[1:5]] for l in d]))
+
+        # Gráficos: evolução por exercício e resumo de cada sessão concluída
+        feitas = [s for s in sessoes if s['fim'] and s['analise']]
+        for nome in dict.fromkeys(s['exercicio'] for s in feitas):
+            do_ex = [s for s in feitas if s['exercicio'] == nome]
+            z.writestr(f'graficos/evolucao_{slug(nome)}.png', grafico_evolucao(nome, do_ex))
+        for s in feitas:
+            z.writestr(f"graficos/sessoes/sessao_{s['id']}_{s['inicio'][:10]}_{slug(s['exercicio'])}.png",
+                       grafico_sessao(s, [x for x in series if x['session_id'] == s['id']],
+                                      [r for r in reps if r['session_id'] == s['id']]))
+    buf.seek(0)
+    return buf, f"halter_{slug(p['nome'])}_{datetime.now():%Y-%m-%d}.zip"
+
+
+LEIA_ME = '''Halter Inteligente — dados exportados
+Paciente: {nome}
+Exportado em: {data}
+
+Os arquivos .csv usam ponto e vírgula (;) como separador e vírgula decimal, e abrem direto no Excel.
+
+paciente.csv          cadastro do paciente
+sessoes.csv           uma linha por sessão: configuração, score e indicadores de cada braço
+                      (saudavel_* e afetado_*) e a comparação entre os braços (simetria_*)
+series.csv            uma linha por série (cada série é feita com um braço)
+repeticoes.csv        uma linha por repetição detectada pelo jogo
+leituras_sensor/      leituras do haltere a 50 Hz: tempo (ms), ângulo θ (°) e aceleração (m/s²),
+                      com a gravidade já subtraída nos eixos Y e Z
+graficos/             evolução de cada exercício e, em graficos/sessoes/, o resumo de cada sessão
+
+Unidades principais
+  amplitude, excursao, rmse_*      graus (°)
+  aderencia_cadencia               fração das repetições no ritmo (0 a 1)
+  tempo_relativo                   duração média da repetição ÷ tempo pedido (1 = no ritmo)
+  jerk_medio                       m/s³          rms_tremor     m/s²
+  mu_x, s_x                        metros        score e notas  0 a 100
+'''
+
+
+# =====================================================================
 # 4. AUTENTICAÇÃO
 # =====================================================================
 def login_obrigatorio(rota):
@@ -573,9 +833,20 @@ def excluir_paciente(pid):
     db().execute(f'DELETE FROM reps WHERE session_id IN ({filtro})', (pid,))
     db().execute(f'DELETE FROM series WHERE session_id IN ({filtro})', (pid,))
     db().execute('DELETE FROM sessions WHERE patient_id = ?', (pid,))
+    db().execute('DELETE FROM jogadores WHERE patient_id = ?', (pid,))
     db().execute('DELETE FROM patients WHERE id = ?', (pid,))
     db().commit()
     return jsonify(ok=True, sessoes_excluidas=len(sessoes))
+
+
+@app.get('/api/patients/<int:pid>/export')
+@login_obrigatorio
+def exportar(pid):
+    """Baixa um .zip com tudo o que foi coletado do paciente (CSV + gráficos)."""
+    if not consulta('SELECT id FROM patients WHERE id = ?', pid):
+        abort(404)
+    arquivo, nome = exportar_paciente(pid)
+    return send_file(arquivo, mimetype='application/zip', as_attachment=True, download_name=nome)
 
 
 @app.get('/api/exercicios')
@@ -743,6 +1014,52 @@ def receber_brutos(sid):
             validas.append(','.join(partes))
     gravacao.write(''.join(l + '\n' for l in validas))
     return jsonify(gravadas=len(validas))
+
+
+# Progresso do paciente no jogo (nível, conquistas, personagem e cenário), acessado pela sessão em andamento
+NOME_VALIDO = re.compile(r'^[a-z0-9_#]{1,40}$')
+
+
+def paciente_da_sessao(sid):
+    linha = consulta('SELECT patient_id FROM sessions WHERE id = ?', sid)
+    if not linha:
+        abort(404)
+    return linha[0]['patient_id']
+
+
+@app.get('/api/sessions/<int:sid>/jogador')
+@login_obrigatorio
+def ler_jogador(sid):
+    """Progresso salvo + estatísticas das sessões anteriores (para conquistas acumuladas)."""
+    pid = paciente_da_sessao(sid)
+    j = (consulta('SELECT * FROM jogadores WHERE patient_id = ?', pid) or [{}])[0]
+    reps = consulta('SELECT COUNT(*) AS n FROM reps r JOIN sessions s ON s.id = r.session_id '
+                    'WHERE s.patient_id = ? AND s.id != ?', pid, sid)[0]['n']
+    sessoes = consulta('SELECT COUNT(*) AS n FROM sessions WHERE patient_id = ? AND fim IS NOT NULL AND id != ?', pid, sid)[0]['n']
+    nome = consulta('SELECT nome FROM patients WHERE id = ?', pid)[0]['nome']
+    return jsonify(nome=nome, xp=j.get('xp') or 0, conquistas=json.loads(j.get('conquistas') or '{}'),
+                   visual=json.loads(j.get('visual') or '{}'), estatisticas={'reps_total': reps, 'sessoes': sessoes})
+
+
+@app.put('/api/sessions/<int:sid>/jogador')
+@login_obrigatorio
+def salvar_jogador(sid):
+    pid = paciente_da_sessao(sid)
+    d = request.get_json(force=True)
+    xp = int(d['xp'])
+    if not 0 <= xp <= 10_000_000:
+        raise ValueError('xp fora da faixa')
+    conquistas = {str(k): str(v)[:40] for k, v in dict(d.get('conquistas') or {}).items()}
+    visual = {str(k): str(v) for k, v in dict(d.get('visual') or {}).items()
+              if k in ('personagem', 'cor', 'acessorio', 'tema')}
+    if len(conquistas) > 100 or not all(NOME_VALIDO.match(x) for x in [*conquistas, *visual.values()]):
+        raise ValueError('conquista ou item de personalização inválido')
+    db().execute('INSERT INTO jogadores (patient_id, xp, conquistas, visual, atualizado) VALUES (?, ?, ?, ?, ?) '
+                 'ON CONFLICT(patient_id) DO UPDATE SET xp = excluded.xp, conquistas = excluded.conquistas, '
+                 'visual = excluded.visual, atualizado = excluded.atualizado',
+                 (pid, xp, json.dumps(conquistas), json.dumps(visual), datetime.now().isoformat(timespec='seconds')))
+    db().commit()
+    return jsonify(ok=True)
 
 
 @app.post('/api/sessions/<int:sid>/end')
