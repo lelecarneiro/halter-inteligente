@@ -610,7 +610,7 @@ function voltar() {
 // XP = soma do Score Geral (memorial 5.10) de cada série: Nota_i = 100·(1 − Erro_medido,i / Erro_máx,i), limitada a 0–100;
 // Score = 0,30·Trajetória + 0,30·Simetria + 0,25·Estabilidade + 0,15·Suavidade (calculado no backend ao encerrar a série).
 // Os pontos do jogo e as conquistas não dão XP. As conquistas premiam ritmo, controle e constância — nunca velocidade.
-const limiarNivel = n => 150 * (n - 1) + 50 * (n - 1) * (n - 2);      // XP total para chegar ao nível n
+const limiarNivel = n => 60 * (n - 1) + 20 * (n - 1) * (n - 2);       // XP total para chegar ao nível n (nível 2 = 60, 3 = 160, 4 = 300, 5 = 480…)
 const nivelDe = xp => { let n = 1; while (xp >= limiarNivel(n + 1)) n++; return n; };
 const TITULOS = ['Iniciante', 'Aprendiz', 'Dedicado', 'Persistente', 'Determinado', 'Craque', 'Campeão', 'Mestre do ritmo', 'Lenda'];
 const titulo = n => TITULOS[Math.min(n, TITULOS.length) - 1];
