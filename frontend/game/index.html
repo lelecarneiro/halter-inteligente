@@ -351,10 +351,10 @@ function conectar() {
 
 // --- Modo simulado: um "paciente virtual" que segue a trilha dos canos ---
 // Gera o pacote completo (θ e aceleração linear) como o ESP32. O braço afetado é simulado com menos
-// amplitude, atraso, mais tremor e mais compensação lateral. Com sessão, os dados vão para o backend.
+// amplitude, mais atraso e mais tremor. Com sessão, os dados vão para o backend.
 const PERFIL = {
-  saudavel: { ganho: 1.0, atraso: 0.08, tremor: 0.03, lateral: 0.03 },
-  afetado:  { ganho: 0.80, atraso: 0.25, tremor: 0.20, lateral: 0.09 },
+  saudavel: { ganho: 1.0, atraso: 0.08, tremor: 0.03 },
+  afetado:  { ganho: 0.80, atraso: 0.25, tremor: 0.20 },
 };
 let simTimer = null, brutos = [];
 function simular() {
@@ -380,7 +380,7 @@ function simular() {
     const omega = omegaF, alfa = alfaF;
     const trem = perfil.tremor * Math.sin(2 * Math.PI * 6 * agora / 1000), ruido = () => (Math.random() - 0.5) * 0.04;
     const az = R * alfa + trem + ruido(), ay = R * omega * omega + 0.5 * trem + ruido();
-    const ax = perfil.lateral * R * alfa + ruido();
+    const ax = ruido();
     const linha = `${Math.round(agora)},${(thSim + (Math.random() - 0.5)).toFixed(2)},${ax.toFixed(3)},${ay.toFixed(3)},${az.toFixed(3)}`;
     if (cfg.sessao && estado !== 'fim') brutos.push(linha);
     receber(linha);
@@ -516,7 +516,7 @@ function mostrarIntervalo(r) {
     <p class="rotulo">Série ${r.n} · ${NOME[r.braco]} concluída</p>
     <div class="placar medio">${r.pontos}</div><div class="pontos-rotulo">pontos</div>
     <p class="ganho-xp">${r.xp == null ? 'Calculando o Score Geral…' : `+${r.xp} XP pelo Score Geral da série · Nível ${nivelDe(jogador.xp)}`}</p>
-    ${r.notas ? `<p class="sub">${[['trajetoria', 'Trajetória'], ['estabilidade', 'Estabilidade'], ['suavidade', 'Suavidade']]
+    ${r.notas ? `<p class="sub">${[['trajetoria', 'Trajetória'], ['suavidade', 'Suavidade']]
       .filter(([k]) => r.notas[k] != null).map(([k, n]) => `${n} <b>${Math.round(r.notas[k])}</b>`).join(' · ')}</p>` : ''}
     <p class="sub">${r.reps} repetições · ${r.ritmo == null ? '–' : Math.round(r.ritmo * 100) + ' %'} no ritmo
       · obstáculos ${r.obstaculos}</p>
@@ -608,7 +608,7 @@ function voltar() {
 // ===================== GAMIFICAÇÃO =====================
 // Progresso por paciente: salvo no backend pela sessão (sem sessão, fica neste navegador).
 // XP = soma do Score Geral (memorial 5.10) de cada série: Nota_i = 100·(1 − Erro_medido,i / Erro_máx,i), limitada a 0–100;
-// Score = 0,30·Trajetória + 0,30·Simetria + 0,25·Estabilidade + 0,15·Suavidade (calculado no backend ao encerrar a série).
+// Score = 0,40·Trajetória + 0,40·Simetria + 0,20·Suavidade (calculado no backend ao encerrar a série).
 // Os pontos do jogo e as conquistas não dão XP. As conquistas premiam ritmo, controle e constância — nunca velocidade.
 const limiarNivel = n => 25 * (n - 1) + 5 * (n - 1) * (n - 2);        // XP total para chegar ao nível n (nível 2 = 25, 3 = 60, 4 = 105, 5 = 160…)
 const nivelDe = xp => { let n = 1; while (xp >= limiarNivel(n + 1)) n++; return n; };

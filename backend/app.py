@@ -149,18 +149,11 @@ CREATE TABLE IF NOT EXISTS reps (
   n INTEGER, t_ms INTEGER, amplitude REAL, vel_pico REAL, duracao_s REAL, no_ritmo INTEGER, cadencia REAL);
 '''
 
-# Categorias de exercícios de membros superiores criadas automaticamente (o profissional pode criar outras)
+# Únicos exercícios disponíveis para novas sessões
 EXERCICIOS_PADRAO = [
     ('Flexão de cotovelo', 'Rosca bíceps: dobrar o cotovelo trazendo o haltere em direção ao ombro'),
-    ('Extensão de cotovelo', 'Tríceps: estender o cotovelo, com o braço elevado ou apoiado'),
-    ('Elevação lateral', 'Abdução de ombro: elevar o braço estendido para o lado até a altura do ombro'),
-    ('Elevação frontal', 'Flexão de ombro: elevar o braço estendido à frente até a altura do ombro'),
-    ('Desenvolvimento de ombro', 'Elevar o haltere da altura do ombro até acima da cabeça'),
-    ('Remada', 'Puxar o haltere em direção ao tronco, com o tronco inclinado ou apoiado'),
-    ('Rotação externa de ombro', 'Cotovelo junto ao corpo a 90°: girar o antebraço para fora'),
     ('Flexão de punho', 'Antebraço apoiado, palma para cima: dobrar o punho'),
-    ('Extensão de punho', 'Antebraço apoiado, palma para baixo: estender o punho'),
-    ('Pronação e supinação', 'Girar o antebraço, virando a palma para cima e para baixo'),
+    ('Elevação lateral', 'Abdução de ombro: elevar o braço estendido para o lado até a altura do ombro'),
 ]
 BRACOS = ('saudavel', 'afetado')
 
@@ -178,12 +171,19 @@ def inicializar_banco():
         if 'serie_id' not in colunas('reps'):
             con.execute('ALTER TABLE reps ADD COLUMN serie_id INTEGER REFERENCES series(id)')
         con.executemany('INSERT OR IGNORE INTO exercicios (nome, descricao, padrao) VALUES (?, ?, 1)', EXERCICIOS_PADRAO)
+        con.executemany('UPDATE exercicios SET padrao = 1 WHERE nome = ?', [(n,) for n, _ in EXERCICIOS_PADRAO])
 
         # Versões antigas: exercício em texto livre → categoria
         con.execute("UPDATE sessions SET exercicio = 'Flexão de cotovelo' WHERE exercicio IS NULL OR TRIM(exercicio) = ''")
         con.execute('INSERT OR IGNORE INTO exercicios (nome) SELECT DISTINCT exercicio FROM sessions WHERE exercicio_id IS NULL')
         con.execute('UPDATE sessions SET exercicio_id = (SELECT id FROM exercicios e WHERE e.nome = sessions.exercicio) '
                     'WHERE exercicio_id IS NULL')
+        # Outros exercícios: deixam de estar disponíveis; os que já têm sessões ficam só para o histórico
+        nomes = [n for n, _ in EXERCICIOS_PADRAO]
+        marcas = ','.join('?' * len(nomes))
+        con.execute(f'UPDATE exercicios SET padrao = 0 WHERE nome NOT IN ({marcas})', nomes)
+        con.execute(f'DELETE FROM exercicios WHERE nome NOT IN ({marcas}) AND id NOT IN '
+                    '(SELECT exercicio_id FROM sessions WHERE exercicio_id IS NOT NULL)', nomes)
 
         # Versões antigas: uma sessão = um braço → vira uma sessão com uma única série
         migrar = [linha[0] for linha in con.execute('SELECT id FROM sessions WHERE series_alvo IS NULL')]
@@ -205,6 +205,8 @@ def inicializar_banco():
                 salvar_analise_sessao(sid)
         for s in consulta('SELECT id, analise FROM sessions WHERE fim IS NOT NULL'):   # resumos de versões antigas
             if json.loads(s['analise'] or '{}').get('versao') != VERSAO_ANALISE:
+                for se in consulta('SELECT id FROM series WHERE session_id = ?', s['id']):
+                    salvar_analise_serie(se['id'])
                 salvar_analise_sessao(s['id'])
 
 
@@ -261,14 +263,13 @@ def dado_invalido(erro):
 # =====================================================================
 K_MEDIA = 10                     # 5.7  janela da média móvel (amostras)
 M_PONTOS = 101                   # 5.9  pontos da trajetória normalizada (τ = 0, 0,01, …, 1)
-FASE0 = 2 * np.pi - np.arccos(0.4)   # cada repetição começa ao cruzar 30 % da amplitude, descendo
+FASE0 = 2 * np.pi - np.arccos(0.4)   # a janela do jogo começa ao cruzar 30 % da amplitude, descendo
 # 5.10 Erro a partir do qual a nota vale 0. Valores iniciais: calibrar com voluntários saudáveis.
 ERRO_MAX = {'trajetoria': 15.0,     # RMSE da trajetória vs. ideal (°)
             'simetria': 15.0,       # RMSE braço afetado vs. saudável (°)
-            'estabilidade': 0.05,   # desvio padrão da posição lateral Sx (m)
             'suavidade': 40.0}      # jerk médio = I_suavidade / duração (m/s³)
-PESOS = {'trajetoria': 0.30, 'simetria': 0.30, 'estabilidade': 0.25, 'suavidade': 0.15}
-VERSAO_ANALISE = 2               # aumentar quando o resumo ganhar campos novos: as sessões antigas são recalculadas
+PESOS = {'trajetoria': 0.40, 'simetria': 0.40, 'suavidade': 0.20}
+VERSAO_ANALISE = 4               # aumentar quando o resumo ganhar campos novos: as sessões antigas são recalculadas
 
 
 def trapezio(y, t):
@@ -309,7 +310,7 @@ def nota(erro, erro_max):
 def notas_e_score(metricas, rmse_simetria=None):
     """5.10 Notas de 0 a 100 e score geral ponderado (pesos redistribuídos se faltar alguma nota)."""
     erros = {'trajetoria': metricas['rmse_trajetoria'], 'simetria': rmse_simetria,
-             'estabilidade': metricas['s_x'], 'suavidade': metricas['jerk_medio']}
+             'suavidade': metricas['jerk_medio']}
     notas = {k: nota(e, ERRO_MAX[k]) for k, e in erros.items() if e is not None and np.isfinite(e)}
     score = sum(PESOS[k] * n for k, n in notas.items()) / sum(PESOS[k] for k in notas)
     return {k: arred(v, 1) for k, v in notas.items()}, arred(score, 1)
@@ -333,14 +334,53 @@ def ler_brutos(sid):
         warnings.simplefilter('ignore')
         d = np.genfromtxt(arquivo, delimiter=',', skip_header=1, invalid_raise=False, ndmin=2)
     d = d[np.isfinite(d).all(axis=1)] if d.size else d
-    return d[np.argsort(d[:, 0], kind='stable')] if len(d) >= 10 else None
+    if len(d) < 10:
+        return None
+    d = d[np.argsort(d[:, 0], kind='stable')]
+    d[:, 1] = np.rad2deg(np.unwrap(np.deg2rad(d[:, 1])))   # θ contínuo: remove saltos de 360° (gravações antigas)
+    return d
 
 
 def janelas(serie, reps):
-    """Intervalo de tempo (s, relógio do ESP32) de cada repetição: do fim da anterior até o fim desta."""
+    """Intervalo de tempo (s, relógio do ESP32) de cada repetição: do fim da anterior até o fim desta.
+    Limitado a 2 períodos da cadência: uma pausa longa antes da repetição não entra na integração (evita deriva)."""
     periodo = 60 / (serie['cadencia'] or 12)
     fins = [r['t_ms'] / 1000 for r in reps]
-    return list(zip([fins[0] - (reps[0]['duracao_s'] or periodo)] + fins[:-1], fins))
+    inicios = [fins[0] - (reps[0]['duracao_s'] or periodo)] + fins[:-1]
+    return [(max(ini, fim - 2 * periodo), fim) for ini, fim in zip(inicios, fins)]
+
+
+def ciclos_vale_a_vale(t, exc, jan, periodo):
+    """Segmenta as repetições de VALE a VALE. O jogo marca o fim da repetição ao cruzar 30 % da amplitude
+    descendo (meio da descida, velocidade máxima); para a análise, cada repetição vai do ponto mais baixo antes
+    do seu pico ao ponto mais baixo depois dele — onde o haltere está parado (v ≈ 0) —, sem o tempo de espera embaixo.
+    Devolve, para cada repetição, os índices (início, fim) em t, ou None se não houver dados suficientes."""
+    picos = []
+    for ini, fim in jan:
+        j = np.flatnonzero((t >= ini) & (t <= fim))
+        picos.append(j[np.argmax(exc[j])] if len(j) >= 5 else None)
+    ciclos = []
+    for k, pk in enumerate(picos):
+        if pk is None:
+            ciclos.append(None)
+            continue
+        ant = next((p for p in reversed(picos[:k]) if p is not None), None)
+        prox = next((p for p in picos[k + 1:] if p is not None), None)
+        a = max(ant if ant is not None else 0, np.searchsorted(t, t[pk] - periodo))          # busca até 1 período
+        b = min(prox if prox is not None else len(t) - 1, np.searchsorted(t, t[pk] + periodo) - 1)
+        i0 = a + np.argmin(exc[a:pk + 1])
+        i1 = pk + np.argmin(exc[pk:b + 1])
+        amp = exc[pk] - min(exc[i0], exc[i1])
+        if amp <= 0 or max(exc[i0], exc[i1]) > exc[pk] - 0.7 * amp:     # vale que não chegou embaixo: descarta
+            ciclos.append(None)
+            continue
+        # Tempo parado embaixo fica fora: o ciclo começa quando o haltere sai de baixo (10 % da amplitude)
+        # e termina quando volta a ela
+        lim0, lim1 = exc[i0] + 0.1 * (exc[pk] - exc[i0]), exc[i1] + 0.1 * (exc[pk] - exc[i1])
+        i0 += np.flatnonzero(exc[i0:pk + 1] <= lim0)[-1]
+        i1 = pk + np.flatnonzero(exc[pk:i1 + 1] <= lim1)[0]
+        ciclos.append((i0, i1) if i1 - i0 >= 5 else None)
+    return ciclos
 
 
 def analisar_grupo(dados, grupos, series_temporais=False):
@@ -352,13 +392,14 @@ def analisar_grupo(dados, grupos, series_temporais=False):
     t_total = dados[:, 0] / 1000
     tau = np.linspace(0, 1, M_PONTOS)
     i_suavidade = duracao = 0.0
-    residuos, laterais, vel_pico, curvas, ideais, erros_traj = [], [], [], [], [], []
+    residuos, vel_pico, curvas, ideais, erros_traj = [], [], [], [], []
     sinais = None
     for serie, reps in grupos:
         if not reps:
             continue
         jan = janelas(serie, reps)
-        no_trecho = (t_total >= jan[0][0]) & (t_total <= jan[-1][1])
+        periodo = 60 / (serie['cadencia'] or 12)
+        no_trecho = (t_total >= jan[0][0] - periodo) & (t_total <= jan[-1][1] + periodo)   # folga para os vales
         if no_trecho.sum() < 10:
             continue
         t, theta, ax, ay, az = (c[no_trecho] for c in (t_total, *dados[:, 1:5].T))
@@ -366,49 +407,53 @@ def analisar_grupo(dados, grupos, series_temporais=False):
         # 5.4.3 Módulo da aceleração linear · 5.6 jerk por diferenças finitas e índice de suavidade
         a_lin = np.hypot(ay, az)
         jerk = np.diff(a_lin) / np.diff(t)
-        i_suavidade += trapezio(np.abs(jerk), t[1:])[-1]
-        duracao += t[-1] - t[0]
-        # 5.7 Média móvel (K = 10) e resíduo → tremor
-        a_lenta = media_movel(a_lin)
-        residuos.append(a_lin - a_lenta)
+        a_lenta = media_movel(a_lin)                                     # 5.7 média móvel (K = 10)
+        nucleo = (t >= jan[0][0]) & (t <= jan[-1][1])                    # só o intervalo das repetições (sem a folga)
+        if nucleo.sum() >= 3:
+            tn = t[nucleo]
+            i_suavidade += trapezio(np.abs(np.diff(a_lin[nucleo]) / np.diff(tn)), tn[1:])[-1]
+            duracao += tn[-1] - tn[0]
+            residuos.append((a_lin - a_lenta)[nucleo])                   # 5.7 resíduo → tremor
 
         sentido = np.sign(serie['amp_max'] - serie['amp_min']) or 1.0
-        ideal = abs(serie['amp_max'] - serie['amp_min']) * (0.5 - 0.5 * np.cos(FASE0 + 2 * np.pi * tau))
-        px = np.full_like(t, np.nan)
-        for (ini, fim), rep in zip(jan, reps):
-            j = (t >= ini) & (t <= fim)
-            if j.sum() < 5:
+        exc = sentido * (theta - serie['amp_min'])                       # excursão a partir da posição baixa (°)
+        forma_ideal = 0.5 - 0.5 * np.cos(FASE0 + 2 * np.pi * tau)        # ciclo ideal de 0 a 1, na fase da janela do jogo
+        # 5.5 Integração (velocidade): repetições de vale a vale, onde o haltere está parado (v ≈ 0)
+        for ciclo in ciclos_vale_a_vale(t, exc, jan, periodo):
+            if ciclo is None:
                 continue
+            j = slice(ciclo[0], ciclo[1] + 1)
             tr = t[j]
             frac = (tr - tr[0]) / (tr[-1] - tr[0])
-            # 5.5 Trapézios: remove o viés de cada eixo e força v = 0 no início e no fim da repetição
+            # Trapézios: remove o viés de cada eixo e força v = 0 nos vales (início e fim da repetição)
             v = np.column_stack([trapezio(a - a.mean(), tr) for a in (ax[j], ay[j], az[j])])
             v -= np.outer(frac, v[-1])
-            p = np.column_stack([trapezio(v[:, k], tr) for k in range(3)])
-            px[j] = p[:, 0]
             vel_pico.append(np.linalg.norm(v, axis=1).max())
-            # 5.9 Tempo normalizado τ = t / T_total e interpolação linear. A 1ª repetição da série parte do
-            # repouso (não tem um ciclo completo antes dela), então fica fora da comparação de trajetórias.
-            if rep['duracao_s'] is None:
+        # 5.9 Trajetória: janela do jogo (do cruzamento de 30 % descendo até o seguinte), na mesma fase da curva
+        # ideal. Tempo normalizado τ = t / T_total e interpolação linear. A 1ª repetição da série parte do
+        # repouso (não tem um ciclo completo antes dela), então fica fora da comparação.
+        for (ini, fim), rep in zip(jan, reps):
+            j = (t >= ini) & (t <= fim)
+            if j.sum() < 5 or rep['duracao_s'] is None:
                 continue
-            curva = interpolacao_linear(tau, frac, sentido * (theta[j] - serie['amp_min']))
+            tr = t[j]
+            curva = interpolacao_linear(tau, (tr - tr[0]) / (tr[-1] - tr[0]), exc[j])
+            # Trajetória ideal na amplitude que a repetição alcançou: o RMSE mede a FORMA e o TEMPO do movimento
+            # (controle); a amplitude já é avaliada à parte (excursão e simetria entre braços)
+            ideal = curva.min() + (curva.max() - curva.min()) * forma_ideal
             curvas.append(curva)
             ideais.append(ideal)
             erros_traj.append(rmse(curva, ideal))
-        laterais.append(px[np.isfinite(px)])
         if series_temporais:
             sinais = dict(t=t - t[0], theta=theta, theta_suave=media_movel(theta), a_lin=a_lin, a_lenta=a_lenta,
-                          tremor=a_lin - a_lenta, jerk=np.concatenate([[0.0], jerk]), px=px)
+                          tremor=a_lin - a_lenta, jerk=np.concatenate([[0.0], jerk]))
     if not curvas:
         return None
 
-    # 5.8 Compensação postural: média, variância e desvio padrão amostral da posição lateral (eixo X)
-    px_todos = np.concatenate(laterais)
-    var_x = px_todos.var(ddof=1) if len(px_todos) > 1 else 0.0
     tremor = np.concatenate(residuos)
     curva_media = np.mean(curvas, axis=0)
     metricas = dict(duracao_s=duracao, i_suavidade=i_suavidade, jerk_medio=i_suavidade / duracao,
-                    rms_tremor=np.sqrt(np.mean(tremor ** 2)), mu_x=px_todos.mean(), var_x=var_x, s_x=np.sqrt(var_x),
+                    rms_tremor=np.sqrt(np.mean(tremor ** 2)),
                     vel_linear_pico=np.mean(vel_pico), rmse_trajetoria=np.mean(erros_traj),
                     excursao=curva_media.max() - curva_media.min())
     resultado = {'metricas': arred(metricas), 'curva_media': arred(curva_media, 2),
@@ -599,8 +644,7 @@ def grafico_sessao(sessao, series, reps):
     aspectos = [('Amplitude\n(% da meta)', lambda r: min(100, r['metricas']['amplitude_pct']) if r.get('metricas', {}).get('amplitude_pct') is not None else None),
                 ('Ritmo\n(% no tempo)', lambda r: None if (r.get('jogo') or {}).get('aderencia_cadencia') is None else 100 * r['jogo']['aderencia_cadencia']),
                 ('Controle', lambda r: (r.get('notas') or {}).get('trajetoria')),
-                ('Fluidez', lambda r: (r.get('notas') or {}).get('suavidade')),
-                ('Estabilidade\nlateral', lambda r: (r.get('notas') or {}).get('estabilidade'))]
+                ('Fluidez', lambda r: (r.get('notas') or {}).get('suavidade'))]
     if any(bracos.get(k, {}).get('metricas') for k in BRACOS):
         ax.set_title('Afetado × saudável (0 a 100, maior é melhor)', loc='left', fontsize=11)
         y = np.arange(len(aspectos))
@@ -662,9 +706,9 @@ def exportar_paciente(pid):
         por_braco = [('total_reps', 'jogo'), ('aderencia_cadencia', 'jogo'), ('tempo_relativo', 'jogo'), ('amp_media', 'jogo'),
                      ('amplitude_alvo', 'jogo'), ('pontuacao', 'jogo'), ('score_geral', None), ('excursao', 'metricas'),
                      ('amplitude_pct', 'metricas'), ('rmse_trajetoria', 'metricas'), ('jerk_medio', 'metricas'),
-                     ('i_suavidade', 'metricas'), ('rms_tremor', 'metricas'), ('mu_x', 'metricas'), ('s_x', 'metricas'),
+                     ('i_suavidade', 'metricas'), ('rms_tremor', 'metricas'),
                      ('vel_linear_pico', 'metricas'), ('trajetoria', 'notas'), ('simetria', 'notas'),
-                     ('estabilidade', 'notas'), ('suavidade', 'notas')]
+                     ('suavidade', 'notas')]
         cab = ['sessao_id', 'inicio', 'fim', 'exercicio', 'series_alvo', 'reps_alvo', 'ordem', 'cadencia_alvo', 'amp_min',
                'amp_max', 'duracao_min', 'score_geral_afetado', 'simetria_rmse', 'simetria_excursao_pct', 'simetria_atraso_apice_pct']
         cab += [braco + '_' + ('nota_' if grupo == 'notas' else '') + campo for braco in BRACOS for campo, grupo in por_braco]
@@ -725,7 +769,7 @@ sessoes.csv           uma linha por sessão: configuração, score e indicadores
 series.csv            uma linha por série (cada série é feita com um braço)
 repeticoes.csv        uma linha por repetição detectada pelo jogo
 leituras_sensor/      leituras do haltere a 50 Hz: tempo (ms), ângulo θ (°) e aceleração (m/s²),
-                      com a gravidade já subtraída nos eixos Y e Z
+                      com a gravidade já subtraída nos três eixos
 graficos/             evolução de cada exercício e, em graficos/sessoes/, o resumo de cada sessão
 
 Unidades principais
@@ -733,7 +777,7 @@ Unidades principais
   aderencia_cadencia               fração das repetições no ritmo (0 a 1)
   tempo_relativo                   duração média da repetição ÷ tempo pedido (1 = no ritmo)
   jerk_medio                       m/s³          rms_tremor     m/s²
-  mu_x, s_x                        metros        score e notas  0 a 100
+  vel_linear_pico                  m/s           score e notas  0 a 100
 '''
 
 
@@ -856,36 +900,6 @@ def listar_exercicios():
                             'ON s.exercicio_id = e.id GROUP BY e.id ORDER BY e.padrao DESC, e.nome'))
 
 
-@app.post('/api/exercicios')
-@login_obrigatorio
-def criar_exercicio():
-    d = request.get_json(force=True)
-    nome = ' '.join(str(d['nome']).split())
-    if not 2 <= len(nome) <= 60:
-        raise ValueError('o nome deve ter entre 2 e 60 caracteres')
-    existente = consulta('SELECT nome FROM exercicios WHERE nome = ?', nome)
-    if existente:
-        falha(409, f'Já existe a categoria "{existente[0]["nome"]}".')
-    cur = db().execute('INSERT INTO exercicios (nome, descricao) VALUES (?, ?)', (nome, d.get('descricao') or None))
-    db().commit()
-    return jsonify(id=cur.lastrowid, nome=nome), 201
-
-
-@app.delete('/api/exercicios/<int:eid>')
-@login_obrigatorio
-def excluir_exercicio(eid):
-    """Só exclui categorias criadas pelo profissional e que ainda não têm sessões."""
-    e = consulta('SELECT e.padrao, COUNT(s.id) AS sessoes FROM exercicios e LEFT JOIN sessions s ON s.exercicio_id = e.id '
-                 'WHERE e.id = ? GROUP BY e.id', eid)
-    if not e:
-        abort(404)
-    if e[0]['padrao'] or e[0]['sessoes']:
-        falha(409, 'Só é possível excluir categorias criadas por você e ainda sem sessões.')
-    db().execute('DELETE FROM exercicios WHERE id = ?', (eid,))
-    db().commit()
-    return jsonify(ok=True)
-
-
 # =====================================================================
 # 6. API — SESSÕES, SÉRIES E REPETIÇÕES
 #    Fluxo do jogo: cria sessão → para cada série e braço: cria série → envia repetições → encerra série
@@ -912,9 +926,9 @@ def criar_sessao():
     """Recebe a configuração do profissional, cria a sessão e devolve o link do jogo já configurado."""
     global gravacao, gravacao_sid, gravacao_simulada
     d = request.get_json(force=True)
-    exercicio = consulta('SELECT id, nome FROM exercicios WHERE id = ?', int(d['exercicio_id']))
+    exercicio = consulta('SELECT id, nome FROM exercicios WHERE id = ? AND padrao = 1', int(d['exercicio_id']))
     if not exercicio:
-        falha(404, 'Categoria de exercício não encontrada.')
+        falha(404, 'Exercício não disponível.')
     reps_alvo = d.get('reps_alvo')
     cfg = dict(patient_id=int(d['patient_id']), exercicio_id=exercicio[0]['id'], exercicio=exercicio[0]['nome'],
                series_alvo=int(d.get('series_alvo') or 3), reps_alvo=int(reps_alvo) if reps_alvo else None,
@@ -1099,7 +1113,7 @@ def detalhe_sessao(sid):
 @app.get('/api/series/<int:serie_id>')
 @login_obrigatorio
 def detalhe_serie(serie_id):
-    """Uma série com as repetições e os sinais (θ, aceleração, tremor, jerk, posição lateral) para os gráficos."""
+    """Uma série com as repetições e os sinais (θ, aceleração, tremor, jerk) para os gráficos."""
     serie = consulta('SELECT * FROM series WHERE id = ?', serie_id)
     if not serie:
         abort(404)

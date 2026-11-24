@@ -165,7 +165,7 @@
   .serie-fadiga { display:grid; grid-template-columns:1.6fr 1fr; gap:28px; align-items:start; }
   .serie-fadiga td, .serie-fadiga th { white-space:nowrap; padding:9px 6px; }
   .titulo-secao { margin:30px 0 14px; font-size:15px; font-weight:650; }
-  .tiles { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
   .tile { background:var(--suave); border-radius:10px; padding:10px 12px; }
   .tile .rotulo { font-size:12px; color:var(--mudo); } .tile .valor { font-size:18px; font-weight:700; } .tile .metodo { font-size:11px; color:var(--mudo); }
 
@@ -331,7 +331,7 @@ const FAIXAS = {
   amplitude: { bom: 90, atencao: 70, maior: true },     // amplitude do afetado em % do saudável
   ritmo:     { bom: 80, atencao: 50, maior: true },     // % das repetições no ritmo
   controle:  { bom: 70, atencao: 40, maior: true },     // nota de trajetória, 0–100
-  razao:     { bom: 1.3, atencao: 2.0, maior: false },  // afetado ÷ saudável (fluidez, tremor, compensação)
+  razao:     { bom: 1.3, atencao: 2.0, maior: false },  // afetado ÷ saudável (fluidez, tremor)
 };
 const nivel = (v, f) => v == null || !isFinite(v) ? null
   : f.maior ? (v >= f.bom ? 'bom' : v >= f.atencao ? 'atencao' : 'alerta')
@@ -349,7 +349,7 @@ function indicadores(an) {
   const af = an?.bracos?.afetado || {}, sa = an?.bracos?.saudavel || {}, ma = af.metricas || {}, ms = sa.metricas || {};
   const amp = an?.simetria?.excursao_pct ?? null;
   const ritmo = pct(af.jogo?.aderencia_cadencia), tempo = af.jogo?.tempo_relativo;
-  const rFlu = razao(ma.jerk_medio, ms.jerk_medio), rTre = razao(ma.rms_tremor, ms.rms_tremor), rLat = razao(ma.s_x, ms.s_x);
+  const rFlu = razao(ma.jerk_medio, ms.jerk_medio), rTre = razao(ma.rms_tremor, ms.rms_tremor);
   return [
     { id: 'amplitude', nome: 'Amplitude de movimento', pergunta: 'Até onde o braço afetado consegue ir?', numero: amp, faixa: FAIXAS.amplitude,
       valor: amp == null ? '—' : `${num(amp, 0)} % do saudável`,
@@ -363,17 +363,13 @@ function indicadores(an) {
     { id: 'controle', nome: 'Controle do movimento', pergunta: 'Segue a trajetória esperada?', numero: af.notas?.trajetoria, faixa: FAIXAS.controle,
       valor: af.notas?.trajetoria == null ? '—' : `${num(af.notas.trajetoria, 0)} de 100`,
       detalhe: ma.rmse_trajetoria == null ? '' : `desvio médio de ${num(ma.rmse_trajetoria, 0)}° do movimento ideal`,
-      explica: 'Compara a curva média de cada repetição com um movimento ideal: suave, na amplitude e no ritmo pedidos.' },
+      explica: 'Compara a forma de cada repetição com um movimento ideal suave, no ritmo pedido e na amplitude que a própria repetição alcançou (a amplitude é avaliada no indicador ao lado).' },
     { id: 'fluidez', nome: 'Fluidez', pergunta: 'O movimento é contínuo ou "travado"?', numero: rFlu, faixa: FAIXAS.razao,
       valor: vezes(rFlu, 'mais irregular'), detalhe: 'trancos e mudanças bruscas de velocidade (jerk)',
       explica: 'Mede trancos e mudanças bruscas de velocidade. Movimentos em "degraus" ou com paradas aumentam o valor.' },
     { id: 'tremor', nome: 'Tremor', pergunta: 'Há oscilações involuntárias?', numero: rTre, faixa: FAIXAS.razao,
       valor: vezes(rTre, 'maior'), detalhe: ma.rms_tremor == null ? '' : `intensidade de ${num(ma.rms_tremor, 2)} m/s²`,
       explica: 'Oscilações rápidas separadas do movimento voluntário, comparadas às do braço saudável.' },
-    { id: 'compensacao', nome: 'Compensação lateral', pergunta: 'O braço desvia para o lado?', numero: rLat, faixa: FAIXAS.razao,
-      valor: ma.s_x == null ? '—' : `${num(ma.s_x * 100, 1)} cm de desvio`,
-      detalhe: ms.s_x == null ? '' : `saudável: ${num(ms.s_x * 100, 1)} cm · ${vezes(rLat, 'maior')}`,
-      explica: 'Deslocamento do haltere para os lados num exercício que deveria ser só para cima e para baixo. Pode indicar compensação com ombro ou tronco.' },
   ].map(i => ({ ...i, nivel: nivel(i.numero, i.faixa) }));
 }
 
@@ -395,45 +391,93 @@ const cartaoIndicador = (i, antes, textoTendencia) => `
     ${antes ? `<div class="tendencia">${tendencia(i.numero, antes.numero, i.faixa, textoTendencia)}</div>` : ''}
   </div>`;
 
-// Frases automáticas: pontos de atenção e destaques da sessão
+// Frases automáticas: cada comentário é montado a partir das métricas extraídas do sinal do haltere
+// (amplitude, tempo das repetições, RMSE da trajetória, jerk, tremor), sempre com o valor medido,
+// a referência (braço saudável ou meta configurada) e, quando cabe, uma sugestão ligada a esse valor.
 function interpretar(an, series, anterior) {
   const atencao = [], destaques = [];
-  if (!an?.bracos?.afetado?.metricas) return { atencao, destaques };
+  const af = an?.bracos?.afetado, sa = an?.bracos?.saudavel || {};
+  if (!af?.metricas) return { atencao, destaques };
+  const ma = af.metricas, ms = sa.metricas || {}, jg = af.jogo || {};
   const ind = Object.fromEntries(indicadores(an).map(i => [i.id, i]));
-  const tempo = an.bracos.afetado.jogo?.tempo_relativo;
-  const frases = {
-    amplitude: i => `O braço afetado alcança ${num(i.numero, 0)} % da amplitude do saudável.`,
-    ritmo: i => `Só ${num(i.numero, 0)} % das repetições do braço afetado ficaram no ritmo` +
-      (tempo > 1.2 ? ': em média mais lentas que o pedido. Considere reduzir a cadência.'
-        : tempo < 0.8 ? ': em média mais rápidas que o pedido. Reforce o controle, principalmente na descida.' : '.'),
-    controle: i => `O movimento do braço afetado se afasta do ideal (${i.detalhe}).`,
-    fluidez: i => `O movimento do braço afetado é ${num(i.numero, 1)}× mais irregular (com mais trancos) que o do saudável.`,
-    tremor: i => `Tremor ${num(i.numero, 1)}× maior no braço afetado.`,
-    compensacao: i => `Desvio lateral ${num(i.numero, 1)}× maior no braço afetado: observe compensação com ombro ou tronco.`,
-  };
-  for (const i of Object.values(ind)) {
-    if (i.nivel === 'alerta' || i.nivel === 'atencao') atencao.push([i.nivel, frases[i.id](i)]);
+  const registrar = (n, texto) => { if (n === 'bom') destaques.push(texto); else if (n) atencao.push([n, texto]); };
+  const comSaudavel = (v, casas, un) => v == null ? '' : ` (saudável: ${num(v, casas, un)})`;
+
+  // Amplitude: excursão angular média (°), em % do saudável e em % da meta configurada
+  {
+    const i = ind.amplitude, alvo = jg.amplitude_alvo, pMeta = ma.amplitude_pct;
+    const n = i.nivel ?? nivel(pMeta, FAIXAS.amplitude);
+    if (n) {
+      let t = `Amplitude: o braço afetado percorreu em média ${num(ma.excursao, 0, '°')} por repetição`;
+      if (i.numero != null) t += `, ${num(i.numero, 0)} % dos ${num(ms.excursao, 0, '°')} do saudável`;
+      if (pMeta != null && alvo) t += `${i.numero != null ? ' e' : ','} ${num(pMeta, 0)} % da meta de ${num(alvo, 0, '°')}`;
+      t += '.';
+      if (n !== 'bom' && pMeta != null && pMeta < 80)
+        t += ` A meta configurada está acima do que o braço alcança hoje: considere aproximar a posição alta de ${num(ma.excursao, 0, '°')} de amplitude e progredir aos poucos.`;
+      registrar(n, t);
+    }
   }
-  // Fadiga: amplitude do braço afetado da 1ª para a última série
+
+  // Ritmo: % de repetições no ritmo e duração média da repetição em relação ao tempo pedido
+  {
+    const i = ind.ritmo, tempo = jg.tempo_relativo;
+    if (i.nivel) {
+      let t = `Ritmo: ${num(i.numero, 0)} % das ${jg.total_reps ?? '—'} repetições do braço afetado ficaram no ritmo`;
+      if (tempo != null) t += tempo > 1.1 ? `; em média, cada repetição durou ${num((tempo - 1) * 100, 0)} % a mais que o pedido`
+        : tempo < 0.9 ? `; em média, cada repetição durou ${num((1 - tempo) * 100, 0)} % a menos que o pedido` : '; a duração média ficou dentro do tempo pedido';
+      t += '.';
+      if (i.nivel !== 'bom' && tempo > 1.2) t += ' Considere reduzir a cadência.';
+      else if (i.nivel !== 'bom' && tempo < 0.8) t += ' Reforce o controle, principalmente na descida.';
+      else if (i.nivel !== 'bom') t += ' A duração média está próxima do pedido, mas varia muito entre as repetições: observe a regularidade.';
+      registrar(i.nivel, t);
+    }
+  }
+
+  // Controle: RMSE da curva média em relação ao movimento ideal (°) e nota de trajetória
+  {
+    const i = ind.controle;
+    if (i.nivel) registrar(i.nivel, `Controle: a repetição média do braço afetado se desviou ${num(ma.rmse_trajetoria, 1, '°')} da trajetória ideal`
+      + `${comSaudavel(ms.rmse_trajetoria, 1, '°')}, nota ${num(i.numero, 0)} de 100.`);
+  }
+
+  // Fluidez e tremor: razão afetado ÷ saudável das métricas de sinal
+  const razaoTexto = r => r < 1.15 ? 'semelhante ao saudável' : `${num(r, 1)}× o do saudável`;
+  if (ind.fluidez.nivel) registrar(ind.fluidez.nivel, `Fluidez: jerk médio de ${num(ma.jerk_medio, 1, ' m/s³')} no braço afetado`
+    + `${comSaudavel(ms.jerk_medio, 1, ' m/s³')}, ${razaoTexto(ind.fluidez.numero)}.`
+    + (ind.fluidez.nivel !== 'bom' ? ' O movimento tem mais trancos e paradas: priorize uma execução lenta e contínua.' : ''));
+  if (ind.tremor.nivel) registrar(ind.tremor.nivel, `Tremor: oscilação de ${num(ma.rms_tremor, 2, ' m/s²')} (RMS) no braço afetado`
+    + `${comSaudavel(ms.rms_tremor, 2, ' m/s²')}, ${razaoTexto(ind.tremor.numero)}.`);
+
+  // Fadiga: amplitude média do braço afetado da 1ª para a última série
   const doAfetado = series.filter(s => s.braco === 'afetado' && s.amp_media != null).sort((a, b) => a.n - b.n);
-  if (doAfetado.length >= 2) {
-    const queda = 100 * (1 - doAfetado.at(-1).amp_media / doAfetado[0].amp_media);
-    if (queda >= 10) atencao.push(['atencao', `A amplitude do braço afetado caiu ${num(queda, 0)} % da 1ª para a última série: possível fadiga. Considere mais descanso entre as séries ou menos repetições.`]);
-    else if (queda <= -10) destaques.push(`A amplitude do braço afetado aumentou ${num(-queda, 0)} % ao longo das séries.`);
+  if (doAfetado.length >= 2 && doAfetado[0].amp_media) {
+    const ini = doAfetado[0].amp_media, fim = doAfetado.at(-1).amp_media, queda = 100 * (1 - fim / ini);
+    if (queda >= 10) atencao.push(['atencao', `Fadiga: a amplitude média do braço afetado caiu de ${num(ini, 0, '°')} na 1ª série para ${num(fim, 0, '°')} na última (−${num(queda, 0)} %). Considere mais descanso entre as séries ou menos repetições.`]);
+    else if (queda <= -10) destaques.push(`A amplitude média do braço afetado subiu de ${num(ini, 0, '°')} na 1ª série para ${num(fim, 0, '°')} na última (+${num(-queda, 0)} %).`);
   }
+
+  // Simetria temporal: atraso do ponto mais alto do afetado em relação ao saudável (% do ciclo)
   const atraso = an.simetria?.atraso_apice_pct;
-  if (atraso >= 5) atencao.push(['atencao', `O braço afetado chega ao ponto mais alto depois do saudável (${num(atraso, 0)} % do ciclo): subida mais lenta.`]);
-  // Comparação com a sessão anterior do mesmo exercício
+  if (atraso >= 5) atencao.push(['atencao', `Simetria: o braço afetado chega ao ponto mais alto ${num(atraso, 0)} % do ciclo depois do saudável, ou seja, a subida é mais lenta.`]);
+
+  // Comparação com a sessão anterior do mesmo exercício, indicador a indicador
   if (anterior?.analise) {
     const antes = Object.fromEntries(indicadores(anterior.analise).map(i => [i.id, i]));
-    const dScore = an.score_geral - anterior.analise.score_geral;
-    if (dScore >= 5) destaques.push(`O score do braço afetado subiu ${num(dScore, 0)} pontos em relação à sessão anterior.`);
-    if (dScore <= -5) atencao.push(['atencao', `O score do braço afetado caiu ${num(-dScore, 0)} pontos em relação à sessão anterior.`]);
-    const dAmp = ind.amplitude.numero - antes.amplitude.numero;
-    if (dAmp >= 5) destaques.push(`A amplitude do afetado passou de ${num(antes.amplitude.numero, 0)} % para ${num(ind.amplitude.numero, 0)} % da do saudável.`);
+    const dScore = an.score_geral != null && anterior.analise.score_geral != null ? an.score_geral - anterior.analise.score_geral : 0;
+    if (dScore >= 5) destaques.push(`Score do braço afetado: de ${num(anterior.analise.score_geral, 0)} para ${num(an.score_geral, 0)} em relação à sessão anterior.`);
+    if (dScore <= -5) atencao.push(['atencao', `Score do braço afetado: de ${num(anterior.analise.score_geral, 0)} para ${num(an.score_geral, 0)} em relação à sessão anterior.`]);
+    const formato = { amplitude: v => `${num(v, 0)} %`, ritmo: v => `${num(v, 0)} %`, controle: v => `${num(v, 0)}/100` };
+    for (const i of Object.values(ind)) {
+      const v0 = antes[i.id]?.numero, v1 = i.numero;
+      if (v0 == null || v1 == null) continue;
+      const razao = i.faixa === FAIXAS.razao, d = v1 - v0;
+      if (Math.abs(d) < (razao ? 0.3 : 10)) continue;              // só variações relevantes
+      const f = formato[i.id] || (v => `${num(v, 1)}×`);
+      const melhorou = razao ? d < 0 : d > 0;
+      const t = `${i.nome}: ${f(v0)} → ${f(v1)} desde a sessão anterior.`;
+      if (melhorou) destaques.unshift(t); else atencao.push(['atencao', t]);
+    }
   }
-  const bons = Object.values(ind).filter(i => i.nivel === 'bom').map(i => i.nome.toLowerCase());
-  if (bons.length) destaques.push(`Dentro da faixa esperada: ${bons.join(', ')}.`);
   atencao.sort((a, b) => (a[0] === 'alerta' ? 0 : 1) - (b[0] === 'alerta' ? 0 : 1));
   return { atencao, destaques };
 }
@@ -445,7 +489,7 @@ function glossario() {
     <p class="pequeno mudo">As cores comparam o braço afetado com faixas de referência e, quando possível, com o próprio braço saudável do paciente na mesma sessão.
     As faixas são valores iniciais e podem ser ajustadas pela equipe clínica.</p>
     <dl class="glossario">
-      <dt>Score geral (0 a 100)</dt><dd>Resumo da qualidade do movimento: controle (30 %), simetria com o saudável (30 %), estabilidade lateral (25 %) e fluidez (15 %).
+      <dt>Score geral (0 a 100)</dt><dd>Resumo da qualidade do movimento: controle (40 %), simetria com o saudável (40 %) e fluidez (20 %).
         <div class="faixas">${faixaTexto(FAIXAS.score)}</div></dd>
       ${ind.map(i => `<dt>${i.nome}</dt><dd>${i.explica}<div class="faixas">${faixaTexto(i.faixa)}</div></dd>`).join('')}
     </dl></details>`;
@@ -521,9 +565,10 @@ async function telaPaciente(id) {
   const exercicio = eid => exercicios.find(e => e.id === eid);
   const ultimaDe = eid => sessoes.filter(s => s.exercicio_id === eid).at(-1);
   const comSessoes = exercicios.filter(e => sessoes.some(s => s.exercicio_id === e.id));
-  const foco = sessoes.at(-1)?.exercicio_id ?? exercicios[0]?.id;     // exercício mais recente do paciente
-  const opcoesExercicio = sel => exercicios.map(e =>
-    `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.nome)}${e.padrao ? '' : ' (personalizada)'}</option>`).join('');
+  const disponiveis = exercicios.filter(e => e.padrao);                // flexão de cotovelo, flexão de punho, elevação lateral
+  const foco = sessoes.at(-1)?.exercicio_id ?? disponiveis[0]?.id;     // exercício mais recente do paciente
+  const opcoesExercicio = sel => disponiveis.map(e =>
+    `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.nome)}</option>`).join('');
 
   const anos = idade(p.nascimento);
   trilha([['Pacientes', '#/'], [p.nome]]);
@@ -552,18 +597,9 @@ async function telaPaciente(id) {
     <form class="cartao" id="fSessao" ${sessoes.length ? 'hidden' : ''}>
       <h2>Nova sessão</h2>
       <div class="grade-form">
-        <label class="l3">Exercício<select name="exercicio_id" id="selExercicio">${opcoesExercicio(foco)}
-          <option value="nova">+ Nova categoria…</option></select></label>
+        <label class="l3">Exercício<select name="exercicio_id" id="selExercicio">${opcoesExercicio(foco)}</select></label>
         <label class="l3">Cada série começa pelo braço<select name="ordem">
           <option value="saudavel">Saudável, depois o afetado</option><option value="afetado">Afetado, depois o saudável</option></select></label>
-      </div>
-      <div class="sub-cartao" id="novaCategoria" hidden>
-        <div class="grade-form">
-          <label class="l3">Nome da nova categoria<input id="novoNome" maxlength="60" placeholder="Ex.: Abdução horizontal de ombro"></label>
-          <label class="l3">Descrição (opcional)<input id="novaDescricao" maxlength="200" placeholder="Como o movimento é feito"></label>
-        </div>
-        <div class="botoes"><button type="button" class="pri" id="btCriarCategoria">Criar categoria</button>
-          <button type="button" class="fantasma" id="btCancelarCategoria">Cancelar</button></div>
       </div>
       <div class="grade-form">
         <label>Séries<input name="series_alvo" type="number" min="1" max="10" required></label>
@@ -597,7 +633,7 @@ async function telaPaciente(id) {
         ${cartaoGrafico('gSim', 'O braço afetado está se aproximando do saudável?',
           'cada ponto é uma sessão. 100 % = o braço afetado alcança a mesma amplitude do saudável. A faixa verde é a região de simetria (90 % a 110 %).', { alto: true, melhor: 'maior' })}
         ${cartaoGrafico('gScore', 'Score geral de cada braço',
-          'resume controle, simetria, estabilidade e fluidez (0 a 100). A distância entre as linhas mostra quanto o afetado ainda está atrás do saudável.', { alto: true, melhor: 'maior' })}
+          'resume controle, simetria e fluidez (0 a 100). A distância entre as linhas mostra quanto o afetado ainda está atrás do saudável.', { alto: true, melhor: 'maior' })}
       </div></div>
       <div class="cartao"><div class="multiplos">
         ${cartaoGrafico('evAmp', 'Amplitude alcançada (°)', 'ângulo médio percorrido por repetição.', { melhor: 'maior' })}
@@ -605,7 +641,6 @@ async function telaPaciente(id) {
         ${cartaoGrafico('evControle', 'Desvio do movimento ideal (°)', 'quanto a repetição média se afasta da trajetória ideal.', { melhor: 'menor' })}
         ${cartaoGrafico('evFluidez', 'Fluidez: afetado ÷ saudável', 'quantas vezes o movimento do afetado tem mais trancos. 1 = igual ao saudável.', { melhor: 'menor' })}
         ${cartaoGrafico('evTremor', 'Tremor: afetado ÷ saudável', 'quantas vezes o tremor do afetado é maior. 1 = igual ao saudável.', { melhor: 'menor' })}
-        ${cartaoGrafico('evLateral', 'Desvio lateral (cm)', 'quanto o haltere vai para os lados; pode indicar compensação.', { melhor: 'menor' })}
       </div></div>
     </section>
 
@@ -662,36 +697,12 @@ async function telaPaciente(id) {
     form.cadencia_alvo.value = u.cadencia_alvo || 12; form.reps_alvo.value = u.reps_alvo || 10;
     form.series_alvo.value = u.series_alvo || 3; form.ordem.value = u.ordem || 'saudavel';
     form.amp_min.value = u.amp_min ?? 0; form.amp_max.value = u.amp_max ?? 60; form.duracao_min.value = u.duracao_min || 2;
-    $('#descExercicio').innerHTML = esc(e?.descricao || '') + (e && !e.padrao && !e.sessoes
-      ? ` <a href="#" id="lkExcluirCategoria">Excluir esta categoria</a>` : '');
-    const lk = $('#lkExcluirCategoria');
-    if (lk) lk.onclick = async ev => {
-      ev.preventDefault();
-      if (!confirm(`Excluir a categoria "${e.nome}"?`)) return;
-      try { await api(`/api/exercicios/${e.id}`, { method: 'DELETE' }); rota(); } catch (erro) { alert(erro.message); }
-    };
+    $('#descExercicio').textContent = e?.descricao || '';
     resumirPlano();
   }
   form.oninput = resumirPlano;
-  let anterior = sel.value;
-  sel.onchange = () => {
-    const nova = sel.value === 'nova';
-    $('#novaCategoria').hidden = !nova;
-    if (nova) return $('#novoNome').focus();
-    anterior = sel.value; preencher();
-  };
-  $('#btCancelarCategoria').onclick = () => { sel.value = anterior; $('#novaCategoria').hidden = true; };
-  $('#btCriarCategoria').onclick = async () => {
-    try {
-      const nova = await api('/api/exercicios', { method: 'POST', body: { nome: $('#novoNome').value, descricao: $('#novaDescricao').value } });
-      exercicios.push({ ...nova, descricao: $('#novaDescricao').value, padrao: 0, sessoes: 0 });
-      sel.innerHTML = opcoesExercicio(nova.id) + '<option value="nova">+ Nova categoria…</option>';
-      anterior = sel.value; $('#novaCategoria').hidden = true; $('#novoNome').value = $('#novaDescricao').value = '';
-      preencher();
-    } catch (erro) { alert(erro.message); }
-  };
+  sel.onchange = preencher;
   aoEnviar(form, async dados => {
-    if (dados.exercicio_id === 'nova') throw new Error('Crie a categoria ou escolha um exercício da lista.');
     const { jogo } = await api('/api/sessions', { method: 'POST', body: { ...dados, patient_id: id } });
     location.href = jogo;                          // abre o jogo já configurado
   });
@@ -743,8 +754,6 @@ async function telaPaciente(id) {
     const refUm = { linhas: [{ y: 1, texto: 'igual ao saudável' }] };
     grafico('evFluidez', { ...linhaCategoria(razaoSerie('jerk_medio')), options: opcoes({ xTipo: 'category', yMin: 0, un: '×', legenda: false, ref: refUm }) });
     grafico('evTremor', { ...linhaCategoria(razaoSerie('rms_tremor')), options: opcoes({ xTipo: 'category', yMin: 0, un: '×', legenda: false, ref: refUm }) });
-    grafico('evLateral', { ...linhaCategoria(porBraco(b => b?.metricas?.s_x == null ? null : b.metricas.s_x * 100)),
-      options: opcoes({ xTipo: 'category', yMin: 0, un: ' cm' }) });
 
     // Histórico
     $('#tabelaSessoes').innerHTML = doExercicio.length ? `<table>
@@ -858,7 +867,6 @@ async function telaSessao(id) {
       ['Ritmo (% no tempo)', b => pct(b.jogo?.aderencia_cadencia)],
       ['Controle do movimento', b => b.notas?.trajetoria],
       ['Fluidez', b => b.notas?.suavidade],
-      ['Estabilidade lateral', b => b.notas?.estabilidade],
     ];
     grafico('gComparacao', { type: 'bar', data: { labels: aspectos.map(x => x[0]),
         datasets: BRACOS.map(b => serie(b.nome, aspectos.map(([, f]) => f(br(b.k)) ?? null), b.cor, { borderRadius: 4, barThickness: 14 })) },
@@ -905,12 +913,8 @@ function detalhesTecnicos(s) {
     ['Índice de suavidade (5.6)', b => b.metricas?.i_suavidade, 1, ' m/s²'],
     ['Jerk médio (5.6)', b => b.metricas?.jerk_medio, 2, ' m/s³'],
     ['Tremor — RMS (5.7)', b => b.metricas?.rms_tremor, 3, ' m/s²'],
-    ['Posição lateral média μx (5.8)', b => pct(b.metricas?.mu_x), 2, ' cm'],
-    ['Desvio padrão lateral Sx (5.8)', b => pct(b.metricas?.s_x), 2, ' cm'],
-    ['Variância lateral S²x (5.8)', b => b.metricas?.var_x == null ? null : b.metricas.var_x * 1e4, 2, ' cm²'],
     ['Nota de trajetória (5.10)', b => b.notas?.trajetoria, 0, ''],
     ['Nota de simetria (5.10)', b => b.notas?.simetria, 0, ''],
-    ['Nota de estabilidade (5.10)', b => b.notas?.estabilidade, 0, ''],
     ['Nota de suavidade (5.10)', b => b.notas?.suavidade, 0, ''],
   ];
   $('#conteudoTecnico').innerHTML = `
@@ -940,7 +944,6 @@ async function desenharSinais(serieId) {
       ${tile('Erro de trajetória', num(m.rmse_trajetoria, 1, '°'), 'RMSE vs. ideal (5.9)')}
       ${tile('Jerk médio', num(m.jerk_medio, 2, ' m/s³'), 'suavidade (5.6)')}
       ${tile('Tremor', num(m.rms_tremor, 3, ' m/s²'), 'RMS do resíduo (5.7)')}
-      ${tile('Compensação lateral Sx', num(pct(m.s_x), 2, ' cm'), 'eixo X (5.8)')}
     </div>
     <div class="graficos">
       <div><h3>Ângulo do haltere</h3><div class="caixa-grafico"><canvas id="gTheta"></canvas></div></div>
@@ -948,7 +951,6 @@ async function desenharSinais(serieId) {
       <div><h3>Aceleração linear: total e movimento lento</h3><div class="caixa-grafico"><canvas id="gAcel"></canvas></div></div>
       <div><h3>Tremor isolado (resíduo)</h3><div class="caixa-grafico"><canvas id="gTremor"></canvas></div></div>
       <div><h3>Jerk (m/s³)</h3><div class="caixa-grafico"><canvas id="gJerk"></canvas></div></div>
-      <div><h3>Deslocamento lateral — eixo X (cm)</h3><div class="caixa-grafico"><canvas id="gPx"></canvas></div></div>
     </div>` : '<p class="mudo">Sem leituras brutas do haltere para esta série.</p>'}
     ${x.reps.length ? `<div class="graficos" style="margin-top:16px">
       <div><h3>Amplitude por repetição (°)</h3><div class="caixa-grafico"><canvas id="gAmp"></canvas></div></div>
@@ -973,8 +975,6 @@ async function desenharSinais(serieId) {
       options: opcoes({ x: 'tempo (s)', y: 'm/s²', legenda: false, un: ' m/s²' }) });
     g('gJerk', { type: 'line', data: { datasets: [serie('Jerk', pontosXY(t, sn.jerk), corB, { borderWidth: 1.5 })] },
       options: opcoes({ x: 'tempo (s)', y: 'm/s³', legenda: false, un: ' m/s³' }) });
-    g('gPx', { type: 'line', data: { datasets: [serie('Posição lateral', pontosXY(t, sn.px, 100), corB)] },
-      options: opcoes({ x: 'tempo (s)', y: 'cm', legenda: false, un: ' cm' }) });
   }
   if (x.reps.length) {
     const n = x.reps.map(r => r.n), corB = x.braco === 'afetado' ? '--s2' : '--s1';

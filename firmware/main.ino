@@ -2,6 +2,9 @@
  * Halter Inteligente — firmware ESP32 + MPU-6050
  * Lê o IMU a 100 Hz, filtra (passa-baixa 12 Hz), estima o ângulo θ e transmite a 50 Hz por BLE (e Serial).
  * Seções do memorial de cálculo: 5.1 (discretização), 5.2 (calibração), 5.4 (ângulo), 5.4.3 (gravidade), 5.7 (filtro).
+ * Dois ângulos são estimados pelo mesmo método (extrapolação + gradiente descendente):
+ *   θ (rotação em X, o movimento do exercício) e φ (inclinação lateral, rotação em Y), para que a gravidade
+ *   seja retirada dos três eixos — sem φ, parte de g "vaza" para ax e vira um falso desvio lateral.
  * Pacote CSV: t_ms,theta_graus,ax,ay,az   (aceleração linear em m/s²)
  */
 #include <Wire.h>
@@ -31,9 +34,10 @@ struct Callbacks : BLEServerCallbacks {
 };
 
 // ---------- Estado ----------
-float offsetGx = 0, theta = 0;                  // offsetGx = E_medio (°/s)
-float wAnterior = 0;                             // ω(t_k-1), usada na extrapolação de θ
-float fAx = 0, fAy = 0, fAz = G, fWx = 0;        // saídas do filtro de 12 Hz
+float offsetGx = 0, offsetGy = 0, offsetGz = 0;  // E_medio de cada eixo do giroscópio (°/s)
+float theta = 0, phi = 0;                        // θ: ângulo do exercício · φ: inclinação lateral
+float wAnterior = 0, wPhiAnterior = 0;           // ω(t_k-1) de θ e de φ, usadas na extrapolação
+float fAx = 0, fAy = 0, fAz = G, fWx = 0, fWy = 0, fWz = 0;  // saídas do filtro de 12 Hz
 bool primeiraLeitura = true;
 unsigned long tAnterior;
 int contador = 0;
@@ -74,9 +78,13 @@ void setup() {
 
   // 3. Calibração (5.2): E_medio = (1/500)·Σ leitura_parado,i — 500 amostras em repouso (LED vermelho aceso)
   digitalWrite(LED_VERMELHO, HIGH);
-  int16_t gx;
-  for (int i = 0; i < 500; i++) { le(0x43, 1, &gx); offsetGx += gx / ESC_GIRO; delay(2); }
-  offsetGx /= 500;
+  int16_t g[3];
+  for (int i = 0; i < 500; i++) {
+    le(0x43, 3, g);
+    offsetGx += g[0] / ESC_GIRO; offsetGy += g[1] / ESC_GIRO; offsetGz += g[2] / ESC_GIRO;
+    delay(2);
+  }
+  offsetGx /= 500; offsetGy /= 500; offsetGz /= 500;
   digitalWrite(LED_VERMELHO, LOW);
   digitalWrite(LED_VERDE, HIGH);
 
@@ -109,27 +117,42 @@ void loop() {
 
   // 5.2 Converte unidades e corrige o offset: a = (a_lida/8192)·9,81 [m/s²]; ω = (ω_lido/65,5) − E_medio [°/s]
   float ax = r[0] / ESC_ACEL * G, ay = r[1] / ESC_ACEL * G, az = r[2] / ESC_ACEL * G;
-  float wx = r[4] / ESC_GIRO - offsetGx;
+  float wx = r[4] / ESC_GIRO - offsetGx, wy = r[5] / ESC_GIRO - offsetGy, wz = r[6] / ESC_GIRO - offsetGz;
 
   // 5.7 Filtro digital passa-baixa de 12 Hz aplicado a cada leitura recebida
-  if (primeiraLeitura) { fAx = ax; fAy = ay; fAz = az; fWx = wx; }
-  fAx += K_FILTRO * (ax - fAx); fAy += K_FILTRO * (ay - fAy);
-  fAz += K_FILTRO * (az - fAz); fWx += K_FILTRO * (wx - fWx);
-  ax = fAx; ay = fAy; az = fAz; wx = fWx;
+  if (primeiraLeitura) { fAx = ax; fAy = ay; fAz = az; fWx = wx; fWy = wy; fWz = wz; }
+  fAx += K_FILTRO * (ax - fAx); fAy += K_FILTRO * (ay - fAy); fAz += K_FILTRO * (az - fAz);
+  fWx += K_FILTRO * (wx - fWx); fWy += K_FILTRO * (wy - fWy); fWz += K_FILTRO * (wz - fWz);
+  ax = fAx; ay = fAy; az = fAz; wx = fWx; wy = fWy; wz = fWz;
 
   // 5.4.1 Ângulo de referência da gravidade: θ_acel = arctan(ay/az) (atan2 = arco-tangente válida nos 4 quadrantes)
   float thetaAcel = atan2(ay, az) * RAD_TO_DEG;
-  if (primeiraLeitura) { theta = thetaAcel; wAnterior = wx; primeiraLeitura = false; }
+  // Inclinação lateral pela gravidade: φ_acel = arctan(−ax / √(ay² + az²))
+  float phiAcel = atan2(-ax, sqrt(ay * ay + az * az)) * RAD_TO_DEG;
+  // Velocidade de φ em ângulos de Euler (rotação em X seguida de Y): φ' = ωy·cos θ − ωz·sen θ
+  float wPhi = wy * cos(theta * DEG_TO_RAD) - wz * sin(theta * DEG_TO_RAD);
+  if (primeiraLeitura) {
+    theta = thetaAcel; wAnterior = wx; phi = phiAcel; wPhiAnterior = wPhi; primeiraLeitura = false;
+  }
   // 5.4 Extrapolação linear (Taylor de 1ª ordem): θ_prev(t_k) = θ(t_k-1) + ω(t_k-1)·Δt
   float thetaPrev = theta + wAnterior * DT;
   // 5.4.2 Gradiente descendente: θ(t_k) = θ_prev(t_k) − α·(θ_prev − θ_acel)
-  theta = thetaPrev - ALFA * (thetaPrev - thetaAcel);
+  // A diferença é levada a (−180°, 180°]: atan2 salta de +180° para −180°, e θ continua contínuo (sem "dar a volta")
+  float erroTheta = thetaPrev - thetaAcel;
+  erroTheta -= 360.0 * round(erroTheta / 360.0);
+  theta = thetaPrev - ALFA * erroTheta;
   wAnterior = wx;
+  // Mesmo método para φ: extrapolação linear + gradiente descendente
+  float phiPrev = phi + wPhiAnterior * DT;
+  phi = phiPrev - ALFA * (phiPrev - phiAcel);
+  wPhiAnterior = wPhi;
 
-  // 5.4.3 Subtração da gravidade: a_lin,y = ay − 9,81·sen θ; a_lin,z = az − 9,81·cos θ
-  float th = theta * DEG_TO_RAD;
-  ay -= G * sin(th);
-  az -= G * cos(th);
+  // 5.4.3 Subtração da gravidade nos três eixos, g_sensor = 9,81·(−sen φ, cos φ·sen θ, cos φ·cos θ):
+  //   a_lin,x = ax + 9,81·sen φ;  a_lin,y = ay − 9,81·cos φ·sen θ;  a_lin,z = az − 9,81·cos φ·cos θ
+  float th = theta * DEG_TO_RAD, ph = phi * DEG_TO_RAD;
+  ax += G * sin(ph);
+  ay -= G * cos(ph) * sin(th);
+  az -= G * cos(ph) * cos(th);
 
   // 5.1 A cada 2 leituras (Δt_envio = 0,02 s → 50 Hz) monta e transmite o pacote
   if (++contador < 2) return;

@@ -118,7 +118,7 @@ HALTER_USUARIO=seunome HALTER_SENHA=suasenha HALTER_SEGREDO=uma-frase-longa pyth
 No jogo, clique em **Modo simulado**. Um "paciente virtual" segue a trilha dos obstáculos e gera o mesmo pacote do ESP32 (ângulo e aceleração), que é enviado ao backend.
 
 - **Análise completa:** a comparação entre os braços também funciona no modo simulado.
-- **Braço afetado simulado:** tem menos amplitude, atraso, mais tremor e mais compensação lateral, para a comparação ficar visível.
+- **Braço afetado simulado:** tem menos amplitude, mais atraso e mais tremor, para a comparação ficar visível.
 - **Jogo sem a plataforma:** também pode ser aberto sozinho em **http://localhost:5000/game/**. Nesse caso, nada é salvo no histórico.
 
 ---
@@ -168,33 +168,28 @@ Cada sessão pertence a uma **categoria de exercício**. A evolução, os gráfi
 | Categoria | Movimento |
 |---|---|
 | Flexão de cotovelo | Rosca bíceps: dobrar o cotovelo trazendo o haltere ao ombro |
-| Extensão de cotovelo | Tríceps: estender o cotovelo, com o braço elevado ou apoiado |
 | Elevação lateral | Abdução de ombro: elevar o braço estendido para o lado |
-| Elevação frontal | Flexão de ombro: elevar o braço estendido à frente |
-| Desenvolvimento de ombro | Elevar o haltere da altura do ombro até acima da cabeça |
-| Remada | Puxar o haltere em direção ao tronco |
-| Rotação externa de ombro | Cotovelo junto ao corpo a 90°: girar o antebraço para fora |
 | Flexão de punho | Antebraço apoiado, palma para cima: dobrar o punho |
-| Extensão de punho | Antebraço apoiado, palma para baixo: estender o punho |
-| Pronação e supinação | Girar o antebraço, virando a palma para cima e para baixo |
 
-**Criar uma categoria:** na lista **Exercício**, escolha **"+ Nova categoria…"** e informe o nome e, se quiser, a descrição. Categorias criadas por você podem ser excluídas enquanto ainda não tiverem sessões.
+Apenas esses três exercícios estão disponíveis para novas sessões. Sessões antigas de outros exercícios continuam no histórico.
 
 ### Página do paciente
-- **Situação atual:** o score geral e os 6 indicadores da última sessão, cada um com cor (Bom / Atenção / Alerta) e uma seta mostrando como mudou desde a 1ª sessão. O link **Ver sessão** abre a análise da última sessão.
+- **Situação atual:** o score geral e os 5 indicadores da última sessão, cada um com cor (Bom / Atenção / Alerta) e uma seta mostrando como mudou desde a 1ª sessão. O link **Ver sessão** abre a análise da última sessão.
 - **Evolução do braço afetado:** gráficos com uma pergunta clínica como título e um **ⓘ Como ler** recolhido:
   - *O braço afetado está se aproximando do saudável?* Amplitude do afetado em % do saudável, com a faixa de simetria (90 % a 110 %) em verde.
   - *Score geral de cada braço.*
-  - **Seis gráficos pequenos**, cada um marcado com "↑ maior é melhor" ou "↓ menor é melhor": amplitude, ritmo, desvio do movimento ideal, fluidez, tremor e desvio lateral.
+  - **Cinco gráficos pequenos**, cada um marcado com "↑ maior é melhor" ou "↓ menor é melhor": amplitude, ritmo, desvio do movimento ideal, fluidez e tremor.
 - **Histórico:** sessões do exercício com o score do afetado (com cor), a amplitude em % do saudável, o ritmo e o número de pontos de atenção. Clique numa linha para abrir a sessão.
 
 ### Página da sessão
 O resumo fica sempre visível no topo, e o restante fica em abas:
 
-1. **Resumo:** o score geral do braço afetado (com cor e comparação com a sessão anterior) e a lista **"O que observar"**, com frases automáticas. Por exemplo:
-   - *"Desvio lateral 2,3× maior no braço afetado: observe compensação com ombro ou tronco."*
-   - *"A amplitude do braço afetado caiu 15 % da 1ª para a última série: possível fadiga."*
-   - *"O score do braço afetado subiu 13 pontos em relação à sessão anterior."*
+1. **Resumo:** o score geral do braço afetado (com cor e comparação com a sessão anterior) e a lista **"O que observar"**. Cada frase é montada a partir das métricas extraídas do sinal: traz o valor medido, a referência (braço saudável ou meta configurada) e, quando cabe, uma sugestão ligada a esse valor. Indicadores fora da faixa viram pontos de atenção e os demais aparecem como destaques. Por exemplo:
+   - *"Amplitude: o braço afetado percorreu em média 42° por repetição, 61 % dos 69° do saudável e 70 % da meta de 60°. A meta configurada está acima do que o braço alcança hoje…"*
+   - *"Ritmo: 40 % das 10 repetições do braço afetado ficaram no ritmo; em média, cada repetição durou 35 % a mais que o pedido. Considere reduzir a cadência."*
+   - *"Tremor: oscilação de 0,45 m/s² (RMS) no braço afetado (saudável: 0,20 m/s²), 2,3× o do saudável."*
+   - *"Fadiga: a amplitude média do braço afetado caiu de 48° na 1ª série para 40° na última (−17 %)."*
+   - *"Amplitude de movimento: 72 % → 85 % desde a sessão anterior."*
 2. **Indicadores:** 6 cartões do braço afetado, cada um com o valor em linguagem simples, a cor, um detalhe e a comparação com a sessão anterior. O **?** de cada cartão diz a pergunta que ele responde e o que é medido.
 3. **Comparação entre os braços:**
    - *Afetado × saudável em cada aspecto:* barras de 0 a 100 lado a lado.
@@ -218,7 +213,6 @@ Todos os indicadores se referem ao **braço afetado**. Sempre que possível, ele
 | Controle do movimento | Segue a trajetória esperada? (0 a 100) | ≥ 70 | 40 a 70 | < 40 |
 | Fluidez | O movimento é contínuo ou "travado"? (× o saudável) | até 1,3× | 1,3× a 2× | > 2× |
 | Tremor | Há oscilações involuntárias? (× o saudável) | até 1,3× | 1,3× a 2× | > 2× |
-| Compensação lateral | O braço desvia para o lado? (× o saudável) | até 1,3× | 1,3× a 2× | > 2× |
 
 > ⚠️ **As faixas são valores iniciais** e devem ser revisadas pela equipe clínica. Elas ficam em um único lugar no código: a constante `FAIXAS`, no início da seção "Interpretação clínica" de `frontend/index.html`.
 
@@ -267,7 +261,7 @@ Na página do paciente, abra o menu **⋯** e use **Editar paciente** para corri
 O progresso é **de cada paciente** e fica salvo no backend: nível, XP, conquistas e o personagem escolhido aparecem de novo na próxima sessão, mesmo em outro computador. No jogo sem sessão (aberto direto em `/game/`), o progresso fica só no navegador.
 
 - **Combo:** obstáculos superados em sequência multiplicam os pontos: ×2 a partir de 5 seguidos e ×3 a partir de 10. Bater num cano zera o combo.
-- **XP e níveis:** os níveis são liberados pelo **Score Geral** (seção 5.10 do memorial). Ao encerrar cada série, o backend calcula `Nota_i = 100 · (1 − Erro_medido,i / Erro_máx,i)` (limitada entre 0 e 100) e o `Score Geral = 0,30·Trajetória + 0,30·Simetria + 0,25·Estabilidade + 0,15·Suavidade`, e esse score (0 a 100) é somado ao XP do paciente. Numa série isolada não há a nota de simetria, porque ela compara os dois braços, então o peso dela é redistribuído entre as outras notas, como no restante da análise. Os pontos do jogo e as conquistas **não** dão XP. Os níveis ficam progressivamente mais longos (25, 60, 105, 160 XP…), e cada um tem um título (Iniciante, Aprendiz, Dedicado…). Sem sessão (jogo livre), não há análise do movimento, então o nível não avança.
+- **XP e níveis:** os níveis são liberados pelo **Score Geral** (seção 5.10 do memorial). Ao encerrar cada série, o backend calcula `Nota_i = 100 · (1 − Erro_medido,i / Erro_máx,i)` (limitada entre 0 e 100) e o `Score Geral = 0,40·Trajetória + 0,40·Simetria + 0,20·Suavidade`, e esse score (0 a 100) é somado ao XP do paciente. Numa série isolada não há a nota de simetria, porque ela compara os dois braços, então o peso dela é redistribuído entre as outras notas, como no restante da análise. Os pontos do jogo e as conquistas **não** dão XP. Os níveis ficam progressivamente mais longos (25, 60, 105, 160 XP…), e cada um tem um título (Iniciante, Aprendiz, Dedicado…). Sem sessão (jogo livre), não há análise do movimento, então o nível não avança.
 - **Conquistas:** 13 no total. Elas premiam **ritmo, controle e constância, nunca velocidade**, para não incentivar o paciente a se apressar. Exemplos: *No compasso* (5 repetições seguidas no ritmo), *Sem arranhões* (série sem bater em nenhum obstáculo), *Constância* (5 sessões) e *Superação* (braço afetado alcança 90 % da amplitude do saudável). Botão **🏆** no painel.
 - **Personalização:** botão **🎨 Personalizar** no painel, fora das séries.
 
@@ -302,10 +296,11 @@ Se o sinal do haltere cair, o jogo **pausa sozinho** e retoma quando os dados vo
 | Seção | Método |
 |---|---|
 | 5.1 | Leitura a 100 Hz em cadência fixa (Δt = 0,01 s), envio a 50 Hz (Δt = 0,02 s) |
-| 5.2 | Calibração: média de 500 amostras em repouso para o offset do giroscópio; conversão de unidades (8192 LSB/g, 65,5 LSB/(°/s)) |
+| 5.2 | Calibração: média de 500 amostras em repouso para o offset dos três eixos do giroscópio; conversão de unidades (8192 LSB/g, 65,5 LSB/(°/s)) |
 | 5.7 | Filtro digital passa-baixa de 1ª ordem com corte em 12 Hz em cada leitura (acelerômetro e giroscópio) |
-| 5.4 | Ângulo: extrapolação linear `θ_prev(t_k) = θ(t_k−1) + ω(t_k−1)·Δt`, ângulo do acelerômetro `atan2(ay, az)` e gradiente descendente `θ = θ_prev − α·(θ_prev − θ_acel)` |
-| 5.4.3 | Subtração da gravidade nos eixos Y e Z |
+| 5.4 | Ângulo do exercício θ: extrapolação linear `θ_prev(t_k) = θ(t_k−1) + ω_x(t_k−1)·Δt`, ângulo do acelerômetro `θ_acel = atan2(ay, az)` e gradiente descendente `θ = θ_prev − α·(θ_prev − θ_acel)`, com a diferença levada a (−180°, 180°] para θ não "dar a volta" |
+| 5.4 | Inclinação lateral φ, pelo mesmo método: `φ_acel = atan2(−ax, √(ay² + az²))`, `φ' = ω_y·cos θ − ω_z·sen θ` |
+| 5.4.3 | Subtração da gravidade nos três eixos: `a_lin,x = ax + g·sen φ`, `a_lin,y = ay − g·cos φ·sen θ`, `a_lin,z = az − g·cos φ·cos θ` |
 
 ### No jogo (`frontend/game/index.html`)
 
@@ -321,18 +316,18 @@ Calculado para cada série e para cada braço (todas as séries dele juntas).
 
 | Seção | Cálculo | Resultado |
 |---|---|---|
-| 5.5 Trapézios | Velocidade e posição a partir da aceleração, repetição a repetição | Velocidade linear de pico, deslocamento lateral |
+| 5.5 Trapézios | Velocidade a partir da aceleração, repetição a repetição (de vale a vale), com correção linear de deriva | Velocidade linear de pico |
 | 5.6 Diferenças finitas | Jerk `J = Δa_lin / Δt`; índice de suavidade = trapézios de \|J\| | Jerk médio, **nota de suavidade** |
 | 5.7 Média móvel e resíduo | K = 10; tremor = `a_lin − a_lenta`; intensidade pelo RMS | RMS do tremor |
-| 5.8 Estatística | Média μx, variância S²x e desvio padrão Sx da posição lateral | **Nota de estabilidade** (compensação postural) |
 | 5.9 Interpolação | Tempo normalizado `τ = t / T_total`, interpolação linear de Lagrange (`interpolacao_linear`) em 101 pontos, RMSE | **Nota de trajetória** (vs. ideal) e **nota de simetria** (afetado vs. saudável), atraso do ápice |
-| 5.10 Score | `Nota = 100 · (1 − erro / erro_máx)`, limitada entre 0 e 100 | **Score geral** = 0,30·Trajetória + 0,30·Simetria + 0,25·Estabilidade + 0,15·Suavidade |
+| 5.10 Score | `Nota = 100 · (1 − erro / erro_máx)`, limitada entre 0 e 100 | **Score geral** = 0,40·Trajetória + 0,40·Simetria + 0,20·Suavidade |
 
 **Simetria.** O braço saudável é a referência do afetado **na própria sessão**. O score do braço afetado inclui a nota de simetria. O score do saudável não inclui, e o peso dela é redistribuído entre as outras notas.
 
 **Observações de implementação:**
-- **Integração dupla.** A integração dupla da aceleração acumula erro. Por isso, em cada repetição, o viés de cada eixo é removido e a velocidade é forçada a zero no início e no fim, quando o haltere está parado.
-- **Trajetória.** A comparação de trajetórias usa o ângulo θ, que não acumula erro de integração. O ângulo é convertido em **excursão a partir da posição baixa**, no sentido da subida. Assim, os dois braços são comparáveis mesmo que o sensor fique invertido quando o haltere troca de mão.
+- **Integração.** A integração da aceleração acumula erro. Por isso, para integrar, cada repetição vai de **vale a vale**: do ponto mais baixo antes do pico ao ponto mais baixo depois dele, sem o tempo de espera embaixo. Nesses pontos o haltere está parado. Em cada repetição, o viés de cada eixo é removido e a velocidade é forçada a zero no início e no fim (correção linear de deriva). Uma pausa longa antes da repetição não entra (janela de até 2 períodos da cadência).
+- **Janela da trajetória.** A comparação de trajetórias usa a janela do jogo (de um cruzamento de 30 % da amplitude, descendo, ao seguinte), na mesma fase da curva ideal `0,5 − 0,5·cos(φ₀ + 2πτ)`. A curva ideal é ajustada à amplitude que cada repetição alcançou: a nota de trajetória mede a **forma e o tempo** do movimento, e a amplitude é avaliada à parte (excursão e simetria entre braços).
+- **Trajetória.** A comparação de trajetórias usa o ângulo θ, que não acumula erro de integração. Saltos de 360° em gravações antigas são removidos (θ contínuo). O ângulo é convertido em **excursão a partir da posição baixa**, no sentido da subida. Assim, os dois braços são comparáveis mesmo que o sensor fique invertido quando o haltere troca de mão.
 - **Primeira repetição de cada série.** Ela parte do repouso e não tem um ciclo completo antes dela, por isso fica fora da comparação de trajetórias.
 - **Limites de erro máximo.** Os limites que definem as notas ficam em `ERRO_MAX`, no início do módulo de análise. Os valores atuais são iniciais e **devem ser calibrados com voluntários saudáveis**:
 
@@ -340,7 +335,6 @@ Calculado para cada série e para cada braço (todas as séries dele juntas).
 |---|---|
 | Trajetória (RMSE) | 15° |
 | Simetria (RMSE) | 15° |
-| Estabilidade (Sx) | 5 cm |
 | Suavidade (jerk médio) | 40 m/s³ |
 
 ---
@@ -397,8 +391,7 @@ A plataforma abre o jogo com a configuração na URL, por exemplo:
 | `GET` · `PUT` · `DELETE` | `/api/patients/<id>` | Ver, editar ou excluir o paciente (exclui também as sessões) |
 | `GET` | `/api/patients/<id>/sessions?exercicio_id=<id>` | Histórico com as métricas, opcionalmente de um exercício |
 | `GET` | `/api/patients/<id>/export` | Baixar o `.zip` com os dados do paciente (CSV) e os gráficos (PNG) |
-| `GET` / `POST` | `/api/exercicios` | Listar e criar categorias de exercício |
-| `DELETE` | `/api/exercicios/<id>` | Excluir categoria personalizada ainda sem sessões |
+| `GET` | `/api/exercicios` | Listar os exercícios (`padrao = 1` = disponível para novas sessões) |
 | `POST` | `/api/sessions` | Criar sessão; devolve o link do jogo configurado |
 | `POST` | `/api/sessions/<id>/series` | O jogo inicia uma série (número, braço, cadência e amplitude em uso) |
 | `POST` | `/api/series/<id>/reps` | O jogo envia cada repetição |
